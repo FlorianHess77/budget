@@ -47,7 +47,7 @@ const HELP = [
       <li><b>Darunter:</b> wie viel vom Budget noch übrig ist.</li>
       <li><b>Kategorien:</b> rechts steht, wie viel du schon ausgegeben hast, darunter, wie viel noch übrig ist.</li>
       <li><b>Rot</b> bedeutet: mehr als 80 % verbraucht oder schon darüber. Ist ein Budget genau aufgebraucht (z. B. die Miete), bleibt es grün.</li>
-      <li><b>Kategorie antippen</b> öffnet ihren Verlauf: die letzten 6 Monate und alle Buchungen. Eine Buchung darin antippen, um sie zu ändern.</li>
+      <li><b>Kategorie antippen</b> öffnet ihren Verlauf: alle Buchungen nach Monat, mit der Summe je Monat. Eine Buchung darin antippen, um sie zu ändern.</li>
       <li>Mit den <b>Pfeilen</b> neben dem Monat blätterst du zu früheren Monaten.</li>
     </ul>`
   },

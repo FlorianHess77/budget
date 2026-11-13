@@ -1,7 +1,7 @@
 'use strict';
 // Budget – Ausgaben erfassen, Monat im Blick. Reines JS, Daten lokal in IndexedDB.
 // Bei Änderungen APP_VER hochzählen, damit iPhone und Mac das Update bekommen.
-const APP_VER = '1.5.0';
+const APP_VER = '1.5.1';
 
 /* ---------- Hilfen ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -456,37 +456,17 @@ function renderSettings() {
 function openHistory(id) {
   const c = catById(id); if (!c) return;
   UI.sheet = null; UI.hist = id;
-  const ym = UI.cur, b = c.budget || 0;
-  const months = Array.from({ length: 6 }, (_, i) => shiftMonth(ym, -i));
-  const sums = months.map(m => S.tx.filter(t => t.cat === id && monthOf(t.date) === m).reduce((a, t) => a + t.amount, 0));
-  const max = Math.max(b, ...sums, 1);
-  const s = sums[0], p = b ? s / b : 0, warn = b && p >= .8 && s !== b;
   const all = S.tx.filter(t => t.cat === id).sort((a, x) => x.date.localeCompare(a.date) || (x.created || 0) - (a.created || 0));
   const shown = UI.histAll ? all : all.slice(0, 30);
+  const monthSum = m => all.filter(t => monthOf(t.date) === m).reduce((a, t) => a + t.amount, 0);
   let lastM = '', list = '';
   for (const t of shown) {
     const m = monthOf(t.date);
-    if (m !== lastM) { list += `<div class="hist-h">${monthLabel(m)}</div>`; lastM = m; }
+    if (m !== lastM) { list += `<div class="hist-h"><span>${monthLabel(m)}</span><span class="num">${money(monthSum(m))}</span></div>`; lastM = m; }
     list += txRow(t);
   }
-  const avg = sums.filter(Boolean).length ? sums.filter(Boolean).reduce((a, v) => a + v, 0) / sums.filter(Boolean).length : 0;
-  $('#sheetTitle').innerHTML = `<span class="dot" style="background:${c.color};display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:10px"></span>${esc(c.name)}`;
+  $('#sheetTitle').innerHTML = `<span class="dot" style="background:${c.color};display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:10px"></span>Verlauf · ${esc(c.name)}`;
   $('#sheet .sheet-body').innerHTML = `
-    <div class="hist-sum">
-      <p class="hero-l">Ausgegeben im ${monthName(ym)}</p>
-      <p class="hist-n num"${warn || (b && s > b) ? ' style="color:var(--danger)"' : ''}>${money(s)}</p>
-      <p class="hero-s">${b ? (s > b ? `<b class="num" style="color:var(--danger)">${money0(s - b)}</b> über ${money0(b)}` : `noch <b class="num">${money0(b - s)}</b> von ${money0(b)}`) : 'ohne Monatsbudget'}</p>
-    </div>
-    <div class="sec-h" style="margin-top:18px"><h2>Letzte 6 Monate</h2><span>Ø ${money0(avg)}</span></div>
-    <div class="hist-ms">
-      ${months.map((m, i) => `<div class="hist-m${i === 0 ? ' cur' : ''}">
-        <span class="hist-ml">${MON3[+m.slice(5) - 1]}${m.slice(0, 4) !== ym.slice(0, 4) ? ' ' + m.slice(2, 4) : ''}</span>
-        <span class="hist-mb"><span style="width:${(sums[i] / max * 100).toFixed(1)}%;background:${b && sums[i] > b ? 'var(--danger)' : c.color}"></span>${b ? `<i style="left:${(b / max * 100).toFixed(1)}%"></i>` : ''}</span>
-        <span class="hist-mv num">${money0(sums[i])}</span>
-      </div>`).join('')}
-    </div>
-    ${b ? '<p class="note" style="padding:6px 0 0">Der Strich zeigt dein Monatsbudget.</p>' : ''}
-    <div class="sec-h"><h2>Alle Buchungen</h2><span>${all.length}</span></div>
     <div class="hist-list">${list || '<div class="empty"><b>Noch keine Buchungen</b>Mit dem Knopf unten fügst du die erste hinzu.</div>'}
       ${all.length > shown.length ? `<button class="more-btn" data-a="histAll">Alle ${all.length} anzeigen</button>` : ''}</div>
     <div class="sheet-foot hist-foot"><button class="btn primary wide" data-a="addTo" data-id="${c.id}">+ Ausgabe zu ${esc(c.name)}</button></div>`;

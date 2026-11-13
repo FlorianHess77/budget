@@ -83,7 +83,7 @@ async def run(theme):
         check(await pg.locator('.tx:has-text("Netflix")').count() == 1, f'{theme}: Rückgängig nach Löschen')
         # Verlauf beim Antippen einer Kategorie
         await pg.click('.cat:has-text("Lebensmittel") .cat-main'); await pg.wait_for_timeout(200)
-        check(await pg.locator('.hist-m').count() == 6 and await pg.locator('.hist-list .tx').count() == 2, f'{theme}: Verlauf zeigt 6 Monate und 2 Buchungen')
+        check(await pg.locator('.hist-m').count() == 0 and await pg.locator('.hist-list .tx').count() == 2 and await pg.locator('.hist-h').count() == 2, f'{theme}: Verlauf zeigt nur die Buchungen nach Monat')
         await shot('04e-verlauf')
         await pg.click('.hist-list .tx:has-text("Billa")'); await pg.wait_for_timeout(150)
         check(await pg.locator('#fAmt').input_value() == '90', f'{theme}: Buchung aus dem Verlauf bearbeiten')
