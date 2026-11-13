@@ -1,7 +1,7 @@
 'use strict';
 // Budget – Ausgaben erfassen, Monat im Blick. Reines JS, Daten lokal in IndexedDB.
 // Bei Änderungen APP_VER hochzählen, damit iPhone und Mac das Update bekommen.
-const APP_VER = '1.3.0';
+const APP_VER = '1.4.0';
 
 /* ---------- Hilfen ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -93,18 +93,29 @@ function save() {
 const catById = id => S.cats.find(c => c.id === id);
 const recById = id => S.rec.find(r => r.id === id);
 
-/* ---------- Wiederkehrende Buchungen ---------- */
-// Legt alle fälligen Monatsbuchungen an (bis heute). r.last = letzter angelegter Monat.
+/* ---------- Fixkosten (wiederkehrende Buchungen) ---------- */
+// r.every = Abstand in Monaten (1, 2, 3, 6, 12), r.day = Tag, r.start = erster fälliger Monat,
+// r.last = zuletzt gebuchter Monat. Legt alle fälligen Buchungen bis heute an.
+const EVERY = { 1: 'monatlich', 2: 'alle 2 Monate', 3: 'vierteljährlich', 6: 'halbjährlich', 12: 'jährlich' };
+const every = r => r.every || 1;
+const nextMonth = r => r.last ? shiftMonth(r.last, every(r)) : r.start;
+const nextDue = r => { const m = nextMonth(r); return `${m}-${pad(Math.min(r.day, daysIn(m)))}`; };
+const perMonth = r => r.amount / every(r);
+const longDate = iso => { const d = new Date(iso + 'T12:00:00'); return `${d.getDate()}. ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
 function materialize() {
   const now = todayISO(), curM = monthOf(now), today = +now.slice(8);
   let added = 0;
   for (const r of S.rec) {
-    let m = r.last ? shiftMonth(r.last, 1) : r.start;
+    let m = nextMonth(r);
     while (m <= curM) {
       const d = Math.min(r.day, daysIn(m));
       if (m === curM && d > today) break;
-      S.tx.push({ id: uid(), type: r.type, amount: r.amount, cat: r.cat, date: `${m}-${pad(d)}`, note: r.note, recId: r.id, created: Date.now() });
-      r.last = m; m = shiftMonth(m, 1); added++;
+      // nie doppelt im selben Monat buchen (z. B. nach Änderung des Datums)
+      if (!S.tx.some(t => t.recId === r.id && monthOf(t.date) === m)) {
+        S.tx.push({ id: uid(), type: r.type, amount: r.amount, cat: r.cat, date: `${m}-${pad(d)}`, note: r.note, recId: r.id, created: Date.now() });
+        added++;
+      }
+      r.last = m; m = shiftMonth(m, every(r));
     }
   }
   if (added) save();
@@ -119,6 +130,7 @@ function route() {
   if (h.startsWith('#/settings')) return renderSettings();
   if (h.startsWith('#/stats')) return renderStats();
   if (h.startsWith('#/help')) return renderHelp();
+  if (h.startsWith('#/fixed')) return renderFixed();
   if (h.startsWith('#/add')) { history.replaceState(null, '', '#/'); renderHome(); return openAdd(); }
   renderHome();
 }
@@ -229,7 +241,7 @@ function backupNag() {
 function txRow(t) {
   const c = catById(t.cat) || { name: 'Ohne Kategorie', color: '#888' };
   const title = t.note || c.name;
-  const sub = `${dayLabel(t.date)}${t.note ? ' · ' + esc(c.name) : ''}${t.recId && recById(t.recId) ? ' · <span class="rec-mark">monatlich</span>' : ''}`;
+  const sub = `${dayLabel(t.date)}${t.note ? ' · ' + esc(c.name) : ''}${t.recId && recById(t.recId) ? ` · <span class="rec-mark">${EVERY[every(recById(t.recId))]}</span>` : ''}`;
   return `<button class="tx" data-a="edit" data-id="${t.id}">
     <span class="tx-ic" style="background:${c.color};color:${inkOn(c.color)}">${esc(c.name[0] || '?')}</span>
     <span class="tx-m"><div class="tx-t">${esc(title)}</div><div class="tx-d">${sub}</div></span>
@@ -244,8 +256,8 @@ function openAdd(edit, cat) {
   openSheet(t, edit ? 'Buchung bearbeiten' : 'Neue Buchung', !!edit);
 }
 function openRec(edit) {
-  const t = edit ? { ...edit, mode: 'rec' } : { mode: 'rec', type: 'out', amount: 0, cat: null, day: new Date().getDate(), note: '', now: true };
-  openSheet(t, edit ? 'Monatliche Buchung' : 'Neue monatliche Buchung', !!edit);
+  const t = edit ? { ...edit, mode: 'rec', every: every(edit), next: nextDue(edit) } : { mode: 'rec', type: 'out', amount: 0, cat: null, every: 1, next: todayISO(), note: '' };
+  openSheet(t, edit ? 'Fixkosten bearbeiten' : 'Neue Fixkosten', !!edit);
 }
 function openSheet(t, title, select) {
   UI.sheet = t;
@@ -260,9 +272,8 @@ function openSheet(t, title, select) {
 }
 function drawAdd(keepInputs) {
   const t = UI.sheet, edit = !!t.id, rec = t.mode === 'rec';
-  const prev = keepInputs ? { amt: $('#fAmt').value, date: $('#fDate')?.value, day: $('#fDay')?.value, note: $('#fNote').value } : null;
+  const prev = keepInputs ? { amt: $('#fAmt').value, date: $('#fDate')?.value, every: $('#fEvery')?.value, next: $('#fNext')?.value, note: $('#fNote').value } : null;
   const cats = activeCats(t.type);
-  const day = +(prev?.day || t.day || 1);
   const curM = monthOf(todayISO());
   const instant = !rec && !edit;
   const parent = !rec && t.recId && recById(t.recId);
@@ -273,21 +284,26 @@ function drawAdd(keepInputs) {
     </div>
     <label class="amt"><input id="fAmt" class="num" inputmode="decimal" autocomplete="off" placeholder="0,00" aria-label="Betrag in Euro" value="${prev ? esc(prev.amt) : centsToInput(t.amount)}"><span>€</span></label>
     <div class="err" id="fErr" hidden></div>
-    <div class="row2">
-      ${rec
-        ? `<label class="fld"><span>Jeden Monat am</span><select id="fDay">${Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}"${i + 1 === day ? ' selected' : ''}>${i + 1}.</option>`).join('')}</select></label>`
-        : `<label class="fld"><span>Datum</span><input id="fDate" type="date" value="${prev ? prev.date : t.date}" max="${todayISO()}"></label>`}
-      <label class="fld"><span>Notiz</span><input id="fNote" placeholder="${t.type === 'out' ? (rec ? 'z. B. Miete' : 'z. B. Billa') : 'z. B. Lohn'}" value="${esc(prev ? prev.note : t.note)}" maxlength="60" enterkeyhint="done"></label>
-    </div>
+    <label class="note-f"><span>Notiz – wofür?</span><input id="fNote" placeholder="${t.type === 'out' ? (rec ? 'z. B. Miete, Handy, Netflix' : 'z. B. Billa, Tanken, Friseur') : 'z. B. Lohn'}" value="${esc(prev ? prev.note : t.note)}" maxlength="60" enterkeyhint="done" autocapitalize="sentences"></label>
+    ${rec
+      ? `<div class="row2">
+          <label class="fld"><span>Wie oft</span><select id="fEvery">${Object.entries(EVERY).map(([k, l]) => `<option value="${k}"${+k === +(prev?.every || t.every) ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+          <label class="fld"><span>${edit ? 'Nächstes Mal am' : 'Erstes Mal am'}</span><input id="fNext" type="date" value="${prev?.next || t.next}"></label>
+        </div>
+        <p class="note" style="padding:0 2px 14px;margin-top:-8px" id="fNextHint">${nextHint(prev?.next || t.next)}</p>`
+      : `<div class="row1"><label class="fld"><span>Datum</span><input id="fDate" type="date" value="${prev ? prev.date : t.date}" max="${todayISO()}"></label></div>`}
     ${instant ? `<label class="tgl"><input type="checkbox" id="fRepeat" ${t.repeat ? 'checked' : ''}><span>Jeden Monat wiederholen</span></label>` : ''}
-    ${rec && !edit ? `<label class="tgl" id="fNowRow"${day > new Date().getDate() ? ' hidden' : ''}><input type="checkbox" id="fNow" ${t.now ? 'checked' : ''}><span>Auch für ${monthName(curM)} schon buchen</span></label>` : ''}
-    ${parent ? `<p class="note" style="padding:0 2px 12px">Gehört zu „${esc(parent.note || catById(parent.cat)?.name)}“ (monatlich). Änderungen gelten nur für diese Buchung.</p>` : ''}
+    ${parent ? `<p class="note" style="padding:0 2px 12px">Gehört zu den Fixkosten „${esc(parent.note || catById(parent.cat)?.name)}“ (${EVERY[every(parent)]}). Änderungen gelten nur für diese Buchung.</p>` : ''}
     <p class="pick-h">${instant && !t.preset ? 'Kategorie antippen – wird sofort gespeichert' : 'Kategorie'}</p>
     <div class="chips">
       ${cats.map(c => `<button class="chip${t.cat === c.id ? ' on' : ''}" data-a="pick" data-id="${c.id}"><span class="dot" style="background:${c.color}"></span>${esc(c.name)}</button>`).join('')}
     </div>
     ${instant && !t.preset ? '' : `<div class="sheet-foot">${edit ? `<button class="btn danger" data-a="${rec ? 'delRec' : 'delTx'}">Löschen</button>` : ''}<button class="btn primary wide" data-a="saveTx">Speichern</button></div>`}
-    ${rec && edit ? `<p class="note" style="padding:12px 2px 0">Änderungen gelten ab der nächsten Buchung. Bereits gebuchte Monate bleiben, wie sie sind.</p>` : ''}`;
+    ${rec && edit ? `<p class="note" style="padding:12px 2px 0">Änderungen gelten ab der nächsten Buchung. Was schon gebucht ist, bleibt, wie es ist.</p>` : ''}`;
+}
+function nextHint(iso) {
+  if (!iso) return '';
+  return iso <= todayISO() ? 'Liegt heute oder in der Vergangenheit – wird beim Speichern gleich gebucht.' : `Wird am ${longDate(iso)} automatisch gebucht.`;
 }
 function readSheet() {
   const t = UI.sheet;
@@ -298,7 +314,10 @@ function readSheet() {
   if (amount > 100000000) return fail('Der Betrag ist zu groß');
   if (!t.cat || !catById(t.cat)) return fail('Wähl eine Kategorie');
   const base = { ...t, amount, note: $('#fNote').value.trim() };
-  if (t.mode === 'rec') { base.day = +$('#fDay').value; base.now = $('#fNow') ? $('#fNow').checked : false; }
+  if (t.mode === 'rec') {
+    base.every = +$('#fEvery').value; base.next = $('#fNext').value;
+    if (!/^\d{4}-\d\d-\d\d$/.test(base.next)) return fail('Wähl ein Datum für die erste Buchung');
+  }
   else { base.date = $('#fDate').value || todayISO(); base.repeat = $('#fRepeat') ? $('#fRepeat').checked : false; }
   return base;
 }
@@ -308,27 +327,28 @@ async function commitTx() {
   const { mode, repeat, now, preset, ...data } = t;
   let msg;
   if (mode === 'rec') {
-    const curM = monthOf(todayISO());
-    if (isNew) {
-      const r = { id: uid(), type: data.type, amount: data.amount, cat: data.cat, day: data.day, note: data.note, start: curM, last: (now && data.day <= new Date().getDate()) ? null : curM };
-      S.rec.push(r);
-      const n = materialize();
-      msg = `Wird jeden Monat am ${r.day}. gebucht${n ? ' – erste Buchung angelegt' : ''}`;
-    } else {
-      const r = recById(data.id); Object.assign(r, { type: data.type, amount: data.amount, cat: data.cat, day: data.day, note: data.note });
-      msg = 'Monatliche Buchung geändert';
+    const base = { type: data.type, amount: data.amount, cat: data.cat, note: data.note, every: data.every };
+    const day = +data.next.slice(8), start = monthOf(data.next);
+    let r;
+    if (isNew) { r = { id: uid(), ...base, day, start, last: null }; S.rec.push(r); }
+    else {
+      r = recById(data.id); Object.assign(r, base);
+      // Nur wenn das nächste Datum geändert wurde, neu ausrichten
+      if (data.next !== nextDue(r)) { r.day = day; r.start = start; r.last = null; }
     }
-    await save(); closeSheet(); renderSettings(); toast(msg); return;
+    const n = materialize();
+    msg = isNew ? `Fixkosten gespeichert${n ? ' – erste Buchung angelegt' : ''}` : 'Fixkosten geändert';
+    await save(); closeSheet(); renderFixed(); toast(msg); return;
   }
   if (isNew) {
     data.id = uid(); data.created = Date.now();
     if (repeat) {
-      const r = { id: uid(), type: data.type, amount: data.amount, cat: data.cat, day: +data.date.slice(8), note: data.note, start: monthOf(data.date), last: monthOf(data.date) };
+      const r = { id: uid(), type: data.type, amount: data.amount, cat: data.cat, every: 1, day: +data.date.slice(8), note: data.note, start: monthOf(data.date), last: monthOf(data.date) };
       S.rec.push(r); data.recId = r.id;
     }
     S.tx.push(data);
     if (repeat) materialize();
-    msg = `${money(data.amount)} · ${catById(data.cat)?.name} gespeichert${repeat ? ' – ab jetzt monatlich' : ''}`;
+    msg = `${money(data.amount)} · ${catById(data.cat)?.name} gespeichert${repeat ? ' – ab jetzt monatlich (siehe Fixkosten)' : ''}`;
   } else {
     S.tx[S.tx.findIndex(x => x.id === data.id)] = data;
     msg = 'Änderung gespeichert';
@@ -381,16 +401,6 @@ function renderSettings() {
       <form class="add-cat" data-form="out"><input placeholder="Neue Kategorie" maxlength="24" aria-label="Neue Ausgaben-Kategorie"><button class="btn" type="submit">Hinzufügen</button></form>
       <div class="set-sum"><span>Monatsbudget gesamt</span><b class="num" id="budSum">${money0(sum)}</b></div>
     </div>
-    <div class="sec-h"><h2>Monatliche Buchungen</h2><span>${S.rec.length ? money0(S.rec.filter(r => r.type === 'out').reduce((a, r) => a + r.amount, 0)) + ' fix' : ''}</span></div>
-    <div class="card">
-      ${S.rec.slice().sort((a, b) => a.day - b.day).map(r => { const c = catById(r.cat) || { name: '?', color: '#888' }; return `
-        <button class="tx" data-a="editRec" data-id="${r.id}">
-          <span class="tx-ic" style="background:${c.color};color:${inkOn(c.color)}">${r.day}.</span>
-          <span class="tx-m"><div class="tx-t">${esc(r.note || c.name)}</div><div class="tx-d">jeden Monat am ${r.day}. · ${esc(c.name)}</div></span>
-          <span class="tx-a num${r.type === 'in' ? ' in' : ''}">${r.type === 'in' ? '+' : '−'}${money(r.amount)}</span>
-        </button>`; }).join('') || '<p class="note">Miete, Versicherung, Abos – einmal anlegen, dann bucht die App sie jeden Monat selbst.</p>'}
-      <button class="more-btn" data-a="addRec">+ Monatliche Buchung</button>
-    </div>
     <div class="sec-h"><h2>Einnahmen-Kategorien</h2></div>
     <div class="card">
       ${inc.map(c => row(c, false)).join('')}
@@ -417,6 +427,39 @@ function renderSettings() {
       </div>
     </div>
     <p class="note">Version ${APP_VER}</p>`;
+}
+
+/* ---------- Fixkosten ---------- */
+function renderFixed() {
+  $('#nav').hidden = false; setTab('fixed');
+  const out = S.rec.filter(r => r.type === 'out'), inc = S.rec.filter(r => r.type === 'in');
+  const pm = out.reduce((a, r) => a + perMonth(r), 0);
+  const budget = activeCats('out').reduce((a, c) => a + (c.budget || 0), 0);
+  const row = r => {
+    const c = catById(r.cat) || { name: '?', color: '#888' }, n = nextDue(r), e = every(r);
+    return `<button class="tx fx" data-a="editRec" data-id="${r.id}">
+      <span class="tx-ic" style="background:${c.color};color:${inkOn(c.color)}">${esc(c.name[0] || '?')}</span>
+      <span class="tx-m">
+        <div class="tx-t">${esc(r.note || c.name)}</div>
+        <div class="fx-d"><b>${EVERY[e]}</b> · ${esc(c.name)}</div>
+        <div class="fx-d">nächste am ${longDate(n)}</div>
+      </span>
+      <span class="fx-a"><span class="tx-a num${r.type === 'in' ? ' in' : ''}">${r.type === 'in' ? '+' : '−'}${money(r.amount)}</span>${e > 1 ? `<span class="fx-pm num">≈ ${money0(perMonth(r))} / Monat</span>` : ''}</span>
+    </button>`;
+  };
+  const sorted = list => list.slice().sort((a, b) => nextDue(a).localeCompare(nextDue(b)));
+  $('#view').innerHTML = `
+    <h1 class="page-h">Fixkosten</h1>
+    <section class="hero" style="padding-top:0">
+      <p class="hero-l">Fixkosten pro Monat</p>
+      <p class="hero-n num">${money(pm)}</p>
+      <p class="hero-s">${out.length ? `<b class="num">${money0(pm * 12)}</b> im Jahr${budget ? ` · ${Math.round(pm / budget * 100)} % deines Budgets` : ''}` : 'Miete, Versicherung, Abos – einmal eintragen, dann bucht die App sie selbst.'}</p>
+    </section>
+    <button class="btn primary" style="width:100%;margin-bottom:8px" data-a="addRec">+ Fixkosten hinzufügen</button>
+    <div class="sec-h"><h2>Ausgaben</h2><span>nach Fälligkeit</span></div>
+    <div class="card">${out.length ? sorted(out).map(row).join('') : '<div class="empty"><b>Noch keine Fixkosten</b>Tipp oben auf „Fixkosten hinzufügen“.</div>'}</div>
+    ${inc.length ? `<div class="sec-h"><h2>Feste Einnahmen</h2></div><div class="card">${sorted(inc).map(row).join('')}</div>` : ''}
+    <p class="note">Bei Beträgen, die nicht monatlich anfallen, zeigt „≈ / Monat“, wie viel du dafür jeden Monat zur Seite legen solltest.</p>`;
 }
 
 /* ---------- Auswertung ---------- */
@@ -559,8 +602,8 @@ const A = {
   editRec(el) { const r = recById(el.dataset.id); if (r) openRec(r); },
   async delRec() {
     const r = recById(UI.sheet.id); if (!r) return;
-    S.rec = S.rec.filter(x => x !== r); await save(); closeSheet(); renderSettings();
-    toast('Monatliche Buchung entfernt', { label: 'Rückgängig', fn: async () => { S.rec.push(r); await save(); renderSettings(); } });
+    S.rec = S.rec.filter(x => x !== r); await save(); closeSheet(); renderFixed();
+    toast('Fixkosten entfernt', { label: 'Rückgängig', fn: async () => { S.rec.push(r); await save(); renderFixed(); } });
   },
   async backup() {
     const data = { app: 'budget', version: 1, exported: new Date().toISOString(), cats: S.cats, tx: S.tx, rec: S.rec };
@@ -592,7 +635,7 @@ const A = {
     const ok = await askConfirm({
       title: `„${c.name}“ entfernen?`,
       text: (used ? `${n} Buchung${n > 1 ? 'en gehören' : ' gehört'} zu dieser Kategorie. Sie bleiben erhalten und zählen weiter in die Auswertung.` : 'Zu dieser Kategorie gibt es noch keine Buchungen.')
-        + (recs ? `<br><br><b>${recs} monatliche Buchung${recs > 1 ? 'en laufen' : ' läuft'} weiter über diese Kategorie.</b> Entferne ${recs > 1 ? 'sie' : 'sie'} vorher, wenn sie nicht mehr gebucht werden soll${recs > 1 ? 'en' : ''}.` : ''),
+        + (recs ? `<br><br><b>${recs} Fixkosten-Eintr${recs > 1 ? 'äge laufen' : 'ag läuft'} weiter über diese Kategorie.</b> Entferne ${recs > 1 ? 'sie' : 'ihn'} im Reiter Fixkosten, wenn nichts mehr gebucht werden soll.` : ''),
       ok: 'Entfernen'
     });
     if (!ok) return;
@@ -634,7 +677,7 @@ document.addEventListener('input', e => {
   }
 });
 document.addEventListener('change', async e => {
-  if (e.target.id === 'fDay') { const row = $('#fNowRow'); if (row) row.hidden = +e.target.value > new Date().getDate(); }
+  if (e.target.id === 'fNext') { const h = $('#fNextHint'); if (h) h.textContent = nextHint(e.target.value); }
   if (e.target.id === 'fileBackup' && e.target.files[0]) {
     try {
       const data = JSON.parse(await e.target.files[0].text());

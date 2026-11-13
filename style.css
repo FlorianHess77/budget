@@ -75,10 +75,16 @@ button { cursor: pointer; }
 @media (max-width: 899px) { .l-short { display: inline; } }
 @media (max-width: 899px) {
   .nav { display: grid; grid-template-columns: repeat(5, 1fr); justify-items: center; padding: 0 4px env(safe-area-inset-bottom); }
-  .nav-i[data-tab="home"] { order: 1; } .nav-i[data-tab="stats"] { order: 2; } .nav-add { order: 3; } .nav-i[data-tab="settings"] { order: 4; } .nav-i[data-tab="help"] { order: 5; }
   .nav-i { width: 100%; font-size: 13px; white-space: nowrap; }
-  .nav-add { width: 60px; height: 60px; }
   .l-long { display: none; }
+  /* Erfassen schwebt rechts über der Leiste – gut mit dem Daumen erreichbar */
+  .nav-add, .nav-add:active {
+    position: fixed; right: 18px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px); z-index: 25;
+    transform: none; width: 66px; height: 66px; box-shadow: 0 2px 4px rgba(0,0,0,.25), 0 8px 22px rgba(0,0,0,.22);
+  }
+  .nav-add:active { transform: scale(.95); }
+  #view { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 110px); }
+  .toast { left: 16px; right: 100px; transform: none; max-width: none; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 24px); }
 }
 .nav-i {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
@@ -190,7 +196,17 @@ button { cursor: pointer; }
 }
 .amt input::placeholder { color: var(--line); }
 .amt span { font-size: 36px; font-weight: 700; color: var(--muted); }
-.row2 { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; margin-bottom: 16px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.row1 { margin-bottom: 14px; max-width: 220px; }
+/* Notiz: eigene Zeile, groß und deutlich */
+.note-f { display: block; margin: 0 0 14px; }
+.note-f > span { display: block; font-size: 16px; font-weight: 700; margin: 0 0 6px 2px; }
+.note-f input {
+  width: 100%; height: 58px; padding: 0 16px; border-radius: 14px;
+  border: 2px solid var(--text); background: var(--card); font-size: 20px; outline: none;
+}
+.note-f input::placeholder { color: var(--muted); opacity: .75; }
+.note-f input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .fld { display: block; }
 .fld > span { display: block; font-size: 14px; color: var(--muted); margin: 0 0 4px 2px; }
 .fld input, .fld select {
@@ -291,6 +307,16 @@ button { cursor: pointer; }
 .tbl th { text-align: left; color: var(--muted); font-weight: 400; padding: 6px 0; }
 .tbl td { padding: 8px 0; border-top: 1px solid var(--line); }
 .tbl th:not(:first-child), .tbl td:not(:first-child) { text-align: right; }
+
+/* Fixkosten */
+.fx { align-items: flex-start; }
+.fx .tx-ic { margin-top: 2px; }
+.fx-d { font-size: 15px; color: var(--muted); }
+.fx-d b { color: var(--text); }
+.fx-a { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
+.fx-pm { font-size: 14px; color: var(--muted); white-space: nowrap; }
+:root[data-fs="xl"] .fx { flex-wrap: wrap; }
+:root[data-fs="xl"] .fx-a { width: 100%; align-items: flex-start; }
 
 /* Hilfe */
 .help { padding: 0 18px; }

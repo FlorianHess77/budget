@@ -18,7 +18,7 @@ const HELP = [
       <li><b>Großes Plus</b> unten (am Mac: „Erfassen“ links oben). Betrag eintippen, dann die <b>Kategorie antippen</b> – das speichert sofort.</li>
       <li><b>Farbiges Plus</b> neben einer Kategorie auf der Übersicht. Die Kategorie ist dann schon gewählt. Betrag eintippen und <b>Speichern</b> drücken (oder die Eingabetaste).</li>
     </ol>
-    <p>Datum und Notiz kannst du vorher ändern. Ohne Änderung gilt heute.</p>
+    <p>Ins große Feld <b>Notiz</b> schreibst du, wofür das Geld war, z. B. „Billa“ – dann findest du die Buchung später leicht wieder. Das Datum kannst du ändern, sonst gilt heute.</p>
     <p class="tip">Am Mac öffnet die Taste <b>N</b> das Erfassen.</p>`
   },
   {
@@ -51,17 +51,18 @@ const HELP = [
     </ul>`
   },
   {
-    id: 'rec', t: 'Monatliche Buchungen (Miete, Abos …)', b: `
-    <p>Fixkosten musst du nur einmal anlegen. Die App bucht sie dann jeden Monat selbst, sobald der Tag erreicht ist.</p>
-    <p><b>Weg 1 – beim Erfassen:</b> Vor dem Antippen der Kategorie den Haken <b>Jeden Monat wiederholen</b> setzen.</p>
-    <p><b>Weg 2 – in den Einstellungen:</b></p>
+    id: 'rec', t: 'Fixkosten (Miete, Versicherung, Abos …)', b: `
+    <p>Fixkosten trägst du nur einmal ein. Die App bucht sie dann automatisch, sobald sie fällig sind – auch wenn sie nur alle paar Monate anfallen.</p>
     <ol>
-      <li>Einstellungen → <b>+ Monatliche Buchung</b>.</li>
-      <li>Betrag, Tag im Monat, Notiz und Kategorie wählen.</li>
-      <li><b>Speichern</b> drücken.</li>
+      <li>Reiter <b>Fixkosten</b> öffnen → <b>Fixkosten hinzufügen</b>.</li>
+      <li>Betrag und Notiz eintragen, z. B. „Haushaltsversicherung“.</li>
+      <li>Bei <b>Wie oft</b> wählen: monatlich, alle 2 Monate, vierteljährlich, halbjährlich oder jährlich.</li>
+      <li>Bei <b>Erstes Mal am</b> das Datum der nächsten Zahlung wählen.</li>
+      <li>Kategorie antippen und <b>Speichern</b> drücken.</li>
     </ol>
-    <p>Ändern oder beenden: in den Einstellungen die monatliche Buchung antippen. Änderungen gelten ab dem nächsten Mal. Was schon gebucht ist, bleibt.</p>
-    <p class="tip">Monatliche Buchungen erkennst du in der Liste am Wort <b>monatlich</b>.</p>`
+    <p>Oben im Reiter siehst du, was deine Fixkosten <b>pro Monat</b> und <b>pro Jahr</b> ausmachen. Bei jährlichen Beträgen steht dabei, wie viel du dafür jeden Monat zur Seite legen solltest.</p>
+    <p><b>Ändern oder beenden:</b> im Reiter Fixkosten den Eintrag antippen. Änderungen gelten ab dem nächsten Mal. Was schon gebucht ist, bleibt.</p>
+    <p class="tip">Schneller für monatliche Beträge: beim normalen Erfassen den Haken <b>Jeden Monat wiederholen</b> setzen.</p>`
   },
   {
     id: 'stats', t: 'Auswertung', b: `
