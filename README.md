@@ -10,10 +10,14 @@ Ausgaben in drei Taps erfassen: Plus, Betrag, Kategorie. Die Startseite zeigt gr
 
 Danach startet Budget ohne Browserleiste und funktioniert offline. Die Daten liegen nur auf dem jeweiligen Gerät.
 
-## Funktionen (Stufe 1)
+## Funktionen
 - Erfassen: Ausgabe oder Einnahme, Betrag, Datum, Notiz – Kategorie antippen speichert sofort
 - Übersicht pro Monat: Ausgaben gesamt, Rest vom Budget, Einnahmen und Saldo
 - Kategorien mit Monatsbudget, Fortschrittsbalken und Warnung ab 80 %
+- Monatliche Buchungen (Miete, Versicherung, Abos): einmal anlegen oder beim Erfassen „Jeden Monat wiederholen“ anhaken – die App bucht sie selbst
+- Auswertung: wohin das Geld im Monat ging und die Ausgaben der letzten 12 Monate (Tipp auf eine Säule wechselt den Monat), auch als Tabelle
+- CSV-Export (Excel-tauglich mit Strichpunkt und Komma)
+- Backup als Datei speichern und laden – auch zum Übertragen zwischen iPhone und Mac; dezente Erinnerung, wenn das letzte Backup über 30 Tage alt ist
 - Buchungen bearbeiten, löschen (mit Rückgängig), nach Kategorie filtern
 - Kategorien anlegen, umbenennen, Farbe wechseln, entfernen
 - Hell, Dunkel oder automatisch; am Mac Seitenleiste, Taste **N** öffnet Erfassen
