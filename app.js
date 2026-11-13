@@ -1,7 +1,7 @@
 'use strict';
 // Budget – Ausgaben erfassen, Monat im Blick. Reines JS, Daten lokal in IndexedDB.
 // Bei Änderungen APP_VER hochzählen, damit iPhone und Mac das Update bekommen.
-const APP_VER = '1.2.0';
+const APP_VER = '1.2.1';
 
 /* ---------- Hilfen ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -249,6 +249,7 @@ function openSheet(t, title, select) {
   UI.sheet = t;
   $('#sheetTitle').textContent = title;
   drawAdd();
+  $('#toast').hidden = true;
   $('#sheet').hidden = false;
   document.body.style.overflow = 'hidden';
   const a = $('#fAmt');
@@ -340,6 +341,20 @@ async function commitTx() {
 function closeSheet() {
   $('#sheet').hidden = true; UI.sheet = null;
   document.body.style.overflow = '';
+  if (UI.confirm) { const r = UI.confirm; UI.confirm = null; r(false); }
+}
+// Bestätigung im eigenen Fenster (große, gut lesbare Knöpfe)
+function askConfirm({ title, text, ok }) {
+  return new Promise(resolve => {
+    if (UI.confirm) UI.confirm(false);
+    UI.confirm = resolve; UI.sheet = null;
+    $('#sheetTitle').textContent = title;
+    $('#sheet .sheet-body').innerHTML = `<p class="confirm-t">${text}</p>
+      <div class="sheet-foot"><button class="btn wide" data-a="confirmNo">Abbrechen</button><button class="btn danger-solid wide" data-a="confirmYes">${esc(ok)}</button></div>`;
+    $('#toast').hidden = true;
+    $('#sheet').hidden = false; document.body.style.overflow = 'hidden';
+    $('[data-a="confirmNo"]').focus();
+  });
 }
 
 /* ---------- Einstellungen ---------- */
@@ -511,6 +526,8 @@ function toast(msg, action) {
 const A = {
   add() { openAdd(); },
   addTo(el) { openAdd(null, el.dataset.id); },
+  confirmYes() { const r = UI.confirm; UI.confirm = null; closeSheet(); r && r(true); },
+  confirmNo() { closeSheet(); },
   fs(el) {
     const f = el.dataset.f;
     try { f === 'm' ? localStorage.removeItem('budget.fs') : localStorage.setItem('budget.fs', f); } catch (e) {}
@@ -568,10 +585,18 @@ const A = {
   async delCat(el) {
     const c = catById(el.dataset.id);
     if (activeCats(c.kind).length <= 1) return toast('Mindestens eine Kategorie muss bleiben');
-    const used = S.tx.some(t => t.cat === c.id);
-    if (used) c.archived = true; else S.cats = S.cats.filter(x => x !== c);
+    const n = S.tx.filter(t => t.cat === c.id).length, used = n > 0;
+    const recs = S.rec.filter(r => r.cat === c.id).length;
+    const ok = await askConfirm({
+      title: `„${c.name}“ entfernen?`,
+      text: (used ? `${n} Buchung${n > 1 ? 'en gehören' : ' gehört'} zu dieser Kategorie. Sie bleiben erhalten und zählen weiter in die Auswertung.` : 'Zu dieser Kategorie gibt es noch keine Buchungen.')
+        + (recs ? `<br><br><b>${recs} monatliche Buchung${recs > 1 ? 'en laufen' : ' läuft'} weiter über diese Kategorie.</b> Entferne ${recs > 1 ? 'sie' : 'sie'} vorher, wenn sie nicht mehr gebucht werden soll${recs > 1 ? 'en' : ''}.` : ''),
+      ok: 'Entfernen'
+    });
+    if (!ok) return;
+    if (used || recs) c.archived = true; else S.cats = S.cats.filter(x => x !== c);
     await save(); renderSettings();
-    toast(`${c.name} entfernt`, { label: 'Rückgängig', fn: async () => { if (used) delete c.archived; else S.cats.push(c); await save(); renderSettings(); } });
+    toast(`${c.name} entfernt`, { label: 'Rückgängig', fn: async () => { if (c.archived) delete c.archived; else S.cats.push(c); await save(); renderSettings(); } });
   },
   theme(el) {
     const t = el.dataset.t;

@@ -147,7 +147,8 @@ button { cursor: pointer; }
 .tx:last-child { border-bottom: 0; }
 .tx-ic { width: 40px; height: 40px; border-radius: 12px; flex: none; display: grid; place-items: center; font-weight: 700; font-size: 17px; }
 .fs button { font-weight: 700; }
-.fs button:nth-child(1) { font-size: 15px; } .fs button:nth-child(2) { font-size: 18px; } .fs button:nth-child(3) { font-size: 21px; }
+.fs button { white-space: nowrap; padding: 0 6px; }
+.fs button:nth-child(1) { font-size: 15px; } .fs button:nth-child(2) { font-size: 17px; } .fs button:nth-child(3) { font-size: 19px; }
 .tx-m { flex: 1; min-width: 0; }
 .tx-t { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tx-d { font-size: 15px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -213,6 +214,10 @@ button { cursor: pointer; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .btn.danger { color: var(--danger); border-color: var(--danger-soft); background: var(--danger-soft); }
 .btn.wide { flex: 1; }
+.btn.danger-solid { background: var(--danger); border-color: var(--danger); color: #FFFFFF; }
+:root[data-theme="dark"] .btn.danger-solid { color: #1A0705; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.danger-solid { color: #1A0705; } }
+.confirm-t { font-size: 18px; line-height: 1.5; margin: 6px 2px 4px; }
 
 /* ---------- Einstellungen & Start ---------- */
 .page-h { font-size: 26px; margin: 4px 0 18px; }
@@ -249,8 +254,7 @@ button { cursor: pointer; }
 .nag p b { color: var(--text); display: block; }
 .nag-b { display: flex; gap: 10px; justify-content: flex-end; }
 .nag-b .btn { height: 46px; }
-.data-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 14px 0 4px; }
-.data-btns .btn:last-child { grid-column: 1 / -1; }
+.data-btns { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; padding: 14px 0 4px; }
 
 /* Auswertung */
 .sh { padding: 14px 0; border-bottom: 1px solid var(--line); }
