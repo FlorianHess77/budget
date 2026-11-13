@@ -81,10 +81,25 @@ async def run(theme):
         check(await pg.locator('.tx:has-text("Netflix")').count() == 0, f'{theme}: Löschen')
         await pg.click('#toast button'); await pg.wait_for_timeout(200)
         check(await pg.locator('.tx:has-text("Netflix")').count() == 1, f'{theme}: Rückgängig nach Löschen')
-        # Filter
-        await pg.click('.cat:has-text("Lebensmittel") .cat-main'); await pg.wait_for_timeout(150)
-        check(await pg.locator('.tx').count() == 1, f'{theme}: Filter nach Kategorie')
-        await pg.click('.cat:has-text("Lebensmittel") .cat-main'); await pg.wait_for_timeout(150)
+        # Verlauf beim Antippen einer Kategorie
+        await pg.click('.cat:has-text("Lebensmittel") .cat-main'); await pg.wait_for_timeout(200)
+        check(await pg.locator('.hist-m').count() == 6 and await pg.locator('.hist-list .tx').count() == 2, f'{theme}: Verlauf zeigt 6 Monate und 2 Buchungen')
+        await shot('04e-verlauf')
+        await pg.click('.hist-list .tx:has-text("Billa")'); await pg.wait_for_timeout(150)
+        check(await pg.locator('#fAmt').input_value() == '90', f'{theme}: Buchung aus dem Verlauf bearbeiten')
+        await pg.click('.sheet-head [data-a="closeSheet"]'); await pg.wait_for_timeout(100)
+
+        # Notiz-Vorschläge
+        await pg.click('.cat:has-text("Lebensmittel") .cat-add'); await pg.wait_for_timeout(150)
+        check('Billa' in await pg.inner_text('#fSugg') and 'Netflix' not in await pg.inner_text('#fSugg'), f'{theme}: Vorschläge aus der Kategorie')
+        await pg.click('.sheet-head [data-a="closeSheet"]')
+        await pg.click('.nav-add'); await pg.wait_for_timeout(150)
+        await pg.fill('#fAmt', '7,50'); await pg.click('#fSugg button:has-text("Netflix")'); await pg.wait_for_timeout(150)
+        check(await pg.locator('#fNote').input_value() == 'Netflix' and await pg.locator('.chip.on:has-text("Abos")').count() == 1, f'{theme}: Vorschlag füllt Notiz und Kategorie')
+        await shot('03b-vorschlaege')
+        await pg.click('[data-a="saveTx"]'); await pg.wait_for_timeout(200)
+        check(await pg.evaluate("S.tx.filter(t=>t.note==='Netflix').length") == 2, f'{theme}: mit Vorschlag gespeichert')
+        await pg.evaluate("S.tx = S.tx.filter(t=>t.amount!==750); save(); renderHome()")
 
         # Plus direkt bei der Kategorie
         await pg.click('.cat:has-text("Abos") .cat-add'); await pg.wait_for_timeout(150)

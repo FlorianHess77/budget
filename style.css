@@ -308,6 +308,34 @@ button { cursor: pointer; }
 .tbl td { padding: 8px 0; border-top: 1px solid var(--line); }
 .tbl th:not(:first-child), .tbl td:not(:first-child) { text-align: right; }
 
+/* Notiz-Vorschläge */
+.sugg { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -4px 0 16px; }
+.sugg:empty { display: none; }
+.sugg-l { font-size: 15px; color: var(--muted); margin-right: 2px; }
+.sugg button {
+  min-height: 42px; padding: 0 16px; border-radius: 21px; border: 1.5px solid var(--edge);
+  background: var(--soft); font-size: 17px; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sugg button.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+/* Verlauf einer Kategorie */
+.hist-sum { text-align: center; padding: 4px 0 0; }
+.hist-n { font-size: 42px; font-weight: 700; line-height: 1.15; margin: 2px 0 4px; }
+.hist-ms { display: grid; gap: 10px; }
+.hist-m { display: grid; grid-template-columns: 54px 1fr auto; align-items: center; gap: 12px; font-size: 17px; }
+.hist-m.cur .hist-ml, .hist-m.cur .hist-mv { font-weight: 700; }
+.hist-ml { color: var(--muted); }
+.hist-m.cur .hist-ml { color: var(--text); }
+.hist-mb { position: relative; height: 14px; background: var(--soft); border-radius: 0 4px 4px 0; box-shadow: inset 0 0 0 1px var(--line); }
+.hist-mb > span { display: block; height: 100%; border-radius: 0 4px 4px 0; min-width: 2px; }
+.hist-mb > i { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--text); margin-left: -1px; }
+.hist-mv { min-width: 64px; text-align: right; }
+.hist-h { font-size: 15px; font-weight: 700; color: var(--muted); padding: 14px 0 2px; border-bottom: 1px solid var(--line); }
+.hist-list .tx:last-child { border-bottom: 0; }
+.sheet-body .sheet-foot { position: sticky; bottom: calc(-1 * (env(safe-area-inset-bottom) + 20px)); background: var(--card); padding: 12px 0 calc(env(safe-area-inset-bottom) + 4px); margin-bottom: 0; z-index: 2; }
+@media (min-width: 900px) { .sheet-body .sheet-foot { bottom: -22px; padding-bottom: 6px; } }
+.hist-foot { position: sticky; bottom: calc(-1 * (env(safe-area-inset-bottom) + 20px)); background: var(--card); padding: 12px 0 calc(env(safe-area-inset-bottom) + 4px); margin-bottom: 0; border-top: 1px solid var(--line); }
+
 /* Fixkosten */
 .fx { align-items: flex-start; }
 .fx .tx-ic { margin-top: 2px; }

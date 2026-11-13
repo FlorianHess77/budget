@@ -19,6 +19,7 @@ const HELP = [
       <li><b>Farbiges Plus</b> neben einer Kategorie auf der Übersicht. Die Kategorie ist dann schon gewählt. Betrag eintippen und <b>Speichern</b> drücken (oder die Eingabetaste).</li>
     </ol>
     <p>Ins große Feld <b>Notiz</b> schreibst du, wofür das Geld war, z. B. „Billa“ – dann findest du die Buchung später leicht wieder. Das Datum kannst du ändern, sonst gilt heute.</p>
+    <p>Unter dem Notizfeld stehen deine <b>häufigsten Notizen</b>. Ein Tipp darauf füllt die Notiz aus – und wählt beim großen Plus gleich die passende Kategorie. Dann nur noch <b>Speichern</b> drücken.</p>
     <p class="tip">Am Mac öffnet die Taste <b>N</b> das Erfassen.</p>`
   },
   {
@@ -46,7 +47,7 @@ const HELP = [
       <li><b>Darunter:</b> wie viel vom Budget noch übrig ist.</li>
       <li><b>Kategorien:</b> rechts steht, wie viel du schon ausgegeben hast, darunter, wie viel noch übrig ist.</li>
       <li><b>Rot</b> bedeutet: mehr als 80 % verbraucht oder schon darüber. Ist ein Budget genau aufgebraucht (z. B. die Miete), bleibt es grün.</li>
-      <li><b>Kategorie antippen</b> zeigt unten nur deren Buchungen. Nochmal antippen zeigt wieder alle.</li>
+      <li><b>Kategorie antippen</b> öffnet ihren Verlauf: die letzten 6 Monate und alle Buchungen. Eine Buchung darin antippen, um sie zu ändern.</li>
       <li>Mit den <b>Pfeilen</b> neben dem Monat blätterst du zu früheren Monaten.</li>
     </ul>`
   },

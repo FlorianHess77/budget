@@ -1,7 +1,7 @@
 'use strict';
 // Budget – Ausgaben erfassen, Monat im Blick. Reines JS, Daten lokal in IndexedDB.
 // Bei Änderungen APP_VER hochzählen, damit iPhone und Mac das Update bekommen.
-const APP_VER = '1.4.0';
+const APP_VER = '1.5.0';
 
 /* ---------- Hilfen ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -186,7 +186,7 @@ function renderHome() {
     else if (s === b) line = `genau aufgebraucht · ${money0(b)}`;
     else line = `noch <b class="num">${money0(b - s)}</b> von ${money0(b)}${warn ? ' · <span class="tag-warn">fast aufgebraucht</span>' : ''}`;
     return `<div class="cat${warn ? ' warn' : ''}">
-      <button class="cat-main" data-a="filter" data-id="${c.id}" aria-pressed="${UI.filter === c.id}">
+      <button class="cat-main" data-a="catHist" data-id="${c.id}" aria-label="Verlauf von ${esc(c.name)} anzeigen">
         <div class="cat-top"><span class="cat-n"><span class="dot" style="background:${c.color}"></span>${esc(c.name)}</span><span class="cat-v num">${money0(s)}</span></div>
         <div class="cat-sub">${line}</div>
         ${b ? `<div class="cat-bar"><div style="width:${Math.min(100, p * 100).toFixed(1)}%"></div></div>` : ''}
@@ -285,6 +285,7 @@ function drawAdd(keepInputs) {
     <label class="amt"><input id="fAmt" class="num" inputmode="decimal" autocomplete="off" placeholder="0,00" aria-label="Betrag in Euro" value="${prev ? esc(prev.amt) : centsToInput(t.amount)}"><span>€</span></label>
     <div class="err" id="fErr" hidden></div>
     <label class="note-f"><span>Notiz – wofür?</span><input id="fNote" placeholder="${t.type === 'out' ? (rec ? 'z. B. Miete, Handy, Netflix' : 'z. B. Billa, Tanken, Friseur') : 'z. B. Lohn'}" value="${esc(prev ? prev.note : t.note)}" maxlength="60" enterkeyhint="done" autocapitalize="sentences"></label>
+    <div class="sugg" id="fSugg">${suggHtml()}</div>
     ${rec
       ? `<div class="row2">
           <label class="fld"><span>Wie oft</span><select id="fEvery">${Object.entries(EVERY).map(([k, l]) => `<option value="${k}"${+k === +(prev?.every || t.every) ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
@@ -300,6 +301,28 @@ function drawAdd(keepInputs) {
     </div>
     ${instant && !t.preset ? '' : `<div class="sheet-foot">${edit ? `<button class="btn danger" data-a="${rec ? 'delRec' : 'delTx'}">Löschen</button>` : ''}<button class="btn primary wide" data-a="saveTx">Speichern</button></div>`}
     ${rec && edit ? `<p class="note" style="padding:12px 2px 0">Änderungen gelten ab der nächsten Buchung. Was schon gebucht ist, bleibt, wie es ist.</p>` : ''}`;
+}
+// Häufigste Notizen – aus der gewählten Kategorie, sonst aus allen (dann mit passender Kategorie)
+function topNotes(cat, type, n = 6) {
+  const m = new Map();
+  for (const t of S.tx) {
+    if (t.type !== type || !t.note || (cat && t.cat !== cat)) continue;
+    const k = t.note.trim().toLowerCase();
+    const e = m.get(k) || { note: t.note.trim(), n: 0, last: '', cats: {} };
+    e.n++; e.cats[t.cat] = (e.cats[t.cat] || 0) + 1;
+    if (t.date >= e.last) { e.last = t.date; e.note = t.note.trim(); }
+    m.set(k, e);
+  }
+  return [...m.values()].sort((a, b) => b.n - a.n || b.last.localeCompare(a.last)).slice(0, n)
+    .map(e => ({ note: e.note, cat: Object.entries(e.cats).sort((a, b) => b[1] - a[1])[0][0] }));
+}
+function suggHtml() {
+  const t = UI.sheet; if (!t) return '';
+  const cat = t.cat && catById(t.cat) && !catById(t.cat).archived ? t.cat : null;
+  const list = topNotes(cat, t.type).filter(x => cat || activeCats(t.type).some(c => c.id === x.cat));
+  if (!list.length) return '';
+  return `<span class="sugg-l">${cat ? 'Häufig bei ' + esc(catById(cat).name) : 'Häufig'}:</span>` +
+    list.map(x => `<button type="button" data-a="sugg" data-note="${esc(x.note)}" data-cat="${x.cat}">${esc(x.note)}</button>`).join('');
 }
 function nextHint(iso) {
   if (!iso) return '';
@@ -427,6 +450,49 @@ function renderSettings() {
       </div>
     </div>
     <p class="note">Version ${APP_VER}</p>`;
+}
+
+/* ---------- Verlauf einer Kategorie ---------- */
+function openHistory(id) {
+  const c = catById(id); if (!c) return;
+  UI.sheet = null; UI.hist = id;
+  const ym = UI.cur, b = c.budget || 0;
+  const months = Array.from({ length: 6 }, (_, i) => shiftMonth(ym, -i));
+  const sums = months.map(m => S.tx.filter(t => t.cat === id && monthOf(t.date) === m).reduce((a, t) => a + t.amount, 0));
+  const max = Math.max(b, ...sums, 1);
+  const s = sums[0], p = b ? s / b : 0, warn = b && p >= .8 && s !== b;
+  const all = S.tx.filter(t => t.cat === id).sort((a, x) => x.date.localeCompare(a.date) || (x.created || 0) - (a.created || 0));
+  const shown = UI.histAll ? all : all.slice(0, 30);
+  let lastM = '', list = '';
+  for (const t of shown) {
+    const m = monthOf(t.date);
+    if (m !== lastM) { list += `<div class="hist-h">${monthLabel(m)}</div>`; lastM = m; }
+    list += txRow(t);
+  }
+  const avg = sums.filter(Boolean).length ? sums.filter(Boolean).reduce((a, v) => a + v, 0) / sums.filter(Boolean).length : 0;
+  $('#sheetTitle').innerHTML = `<span class="dot" style="background:${c.color};display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:10px"></span>${esc(c.name)}`;
+  $('#sheet .sheet-body').innerHTML = `
+    <div class="hist-sum">
+      <p class="hero-l">Ausgegeben im ${monthName(ym)}</p>
+      <p class="hist-n num"${warn || (b && s > b) ? ' style="color:var(--danger)"' : ''}>${money(s)}</p>
+      <p class="hero-s">${b ? (s > b ? `<b class="num" style="color:var(--danger)">${money0(s - b)}</b> über ${money0(b)}` : `noch <b class="num">${money0(b - s)}</b> von ${money0(b)}`) : 'ohne Monatsbudget'}</p>
+    </div>
+    <div class="sec-h" style="margin-top:18px"><h2>Letzte 6 Monate</h2><span>Ø ${money0(avg)}</span></div>
+    <div class="hist-ms">
+      ${months.map((m, i) => `<div class="hist-m${i === 0 ? ' cur' : ''}">
+        <span class="hist-ml">${MON3[+m.slice(5) - 1]}${m.slice(0, 4) !== ym.slice(0, 4) ? ' ' + m.slice(2, 4) : ''}</span>
+        <span class="hist-mb"><span style="width:${(sums[i] / max * 100).toFixed(1)}%;background:${b && sums[i] > b ? 'var(--danger)' : c.color}"></span>${b ? `<i style="left:${(b / max * 100).toFixed(1)}%"></i>` : ''}</span>
+        <span class="hist-mv num">${money0(sums[i])}</span>
+      </div>`).join('')}
+    </div>
+    ${b ? '<p class="note" style="padding:6px 0 0">Der Strich zeigt dein Monatsbudget.</p>' : ''}
+    <div class="sec-h"><h2>Alle Buchungen</h2><span>${all.length}</span></div>
+    <div class="hist-list">${list || '<div class="empty"><b>Noch keine Buchungen</b>Mit dem Knopf unten fügst du die erste hinzu.</div>'}
+      ${all.length > shown.length ? `<button class="more-btn" data-a="histAll">Alle ${all.length} anzeigen</button>` : ''}</div>
+    <div class="sheet-foot hist-foot"><button class="btn primary wide" data-a="addTo" data-id="${c.id}">+ Ausgabe zu ${esc(c.name)}</button></div>`;
+  $('#toast').hidden = true;
+  $('#sheet').hidden = false; document.body.style.overflow = 'hidden';
+  $('#sheet .sheet-card').scrollTop = 0;
 }
 
 /* ---------- Fixkosten ---------- */
@@ -571,6 +637,15 @@ function toast(msg, action) {
 const A = {
   add() { openAdd(); },
   addTo(el) { openAdd(null, el.dataset.id); },
+  catHist(el) { UI.histAll = false; openHistory(el.dataset.id); },
+  histAll() { UI.histAll = true; openHistory(UI.hist); },
+  sugg(el) {
+    const t = UI.sheet; if (!t) return;
+    $('#fNote').value = el.dataset.note;
+    if (!t.cat && catById(el.dataset.cat)) { t.cat = el.dataset.cat; t.preset = true; drawAdd(true); }
+    document.querySelectorAll('#fSugg button').forEach(b => b.classList.toggle('on', b.dataset.note === el.dataset.note));
+    const a = $('#fAmt'); if (!a.value) a.focus();
+  },
   confirmYes() { const r = UI.confirm; UI.confirm = null; closeSheet(); r && r(true); },
   confirmNo() { closeSheet(); },
   fs(el) {
@@ -587,7 +662,7 @@ const A = {
   },
   pick(el) {
     UI.sheet.cat = el.dataset.id;
-    if (UI.sheet.id || UI.sheet.mode === 'rec' || UI.sheet.preset) { document.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c === el)); $('#fErr').hidden = true; return; }
+    if (UI.sheet.id || UI.sheet.mode === 'rec' || UI.sheet.preset) { document.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c === el)); $('#fErr').hidden = true; $('#fSugg').innerHTML = suggHtml(); return; }
     commitTx();
   },
   saveTx: commitTx,
