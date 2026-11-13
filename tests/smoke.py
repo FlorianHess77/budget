@@ -168,6 +168,15 @@ async def run(theme):
         await pg.click('[data-tab="home"]'); await pg.wait_for_timeout(200)
         check(await pg.locator('.cat').count() == 6, f'{theme}: neue Kategorie in der Übersicht')
 
+        # Hilfe
+        await pg.click('[data-tab="help"]'); await pg.wait_for_timeout(200)
+        check(await pg.locator('.help details').count() == 13, f'{theme}: 13 Hilfethemen')
+        await pg.click('.help summary:has-text("Backup")'); await pg.wait_for_timeout(100)
+        await pg.click('.help summary:has-text("Monatliche")'); await pg.wait_for_timeout(100)
+        check(await pg.locator('.help details[open]').count() == 1 and 'jeden Monat selbst' in await pg.inner_text('.help details[open]'), f'{theme}: immer nur ein Thema offen')
+        await shot('11-hilfe')
+        await pg.click('[data-tab="home"]'); await pg.wait_for_timeout(200)
+
         # Mac-Format
         await pg.set_viewport_size({'width': 1280, 'height': 860}); await pg.wait_for_timeout(200)
         await pg.screenshot(path=f'{OUT}/{theme}-07-mac.png')

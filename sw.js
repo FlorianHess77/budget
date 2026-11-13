@@ -2,7 +2,7 @@
 // Die Version kommt aus app.js (APP_VER) über sw.js?v=… – hier nichts hochzählen.
 const CACHE = 'budget-' + (new URL(location.href).searchParams.get('v') || 'dev');
 const FONTS = 'budget-fonts';
-const FILES = ['./', './index.html', './style.css', './app.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
+const FILES = ['./', './index.html', './style.css', './app.js', './help.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));

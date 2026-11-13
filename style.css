@@ -71,10 +71,14 @@ button { cursor: pointer; }
   background: var(--card); border-top: 1px solid var(--line);
 }
 .nav-brand { display: none; }
+.l-short { display: none; }
+@media (max-width: 899px) { .l-short { display: inline; } }
 @media (max-width: 899px) {
-  .nav { display: grid; grid-template-columns: repeat(4, 1fr); justify-items: center; }
-  .nav-i[data-tab="home"] { order: 1; } .nav-i[data-tab="stats"] { order: 2; } .nav-add { order: 3; } .nav-i[data-tab="settings"] { order: 4; }
-  .nav-i { width: 100%; }
+  .nav { display: grid; grid-template-columns: repeat(5, 1fr); justify-items: center; padding: 0 4px env(safe-area-inset-bottom); }
+  .nav-i[data-tab="home"] { order: 1; } .nav-i[data-tab="stats"] { order: 2; } .nav-add { order: 3; } .nav-i[data-tab="settings"] { order: 4; } .nav-i[data-tab="help"] { order: 5; }
+  .nav-i { width: 100%; font-size: 13px; white-space: nowrap; }
+  .nav-add { width: 60px; height: 60px; }
+  .l-long { display: none; }
 }
 .nav-i {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
@@ -287,6 +291,28 @@ button { cursor: pointer; }
 .tbl th { text-align: left; color: var(--muted); font-weight: 400; padding: 6px 0; }
 .tbl td { padding: 8px 0; border-top: 1px solid var(--line); }
 .tbl th:not(:first-child), .tbl td:not(:first-child) { text-align: right; }
+
+/* Hilfe */
+.help { padding: 0 18px; }
+.help details { border-bottom: 1px solid var(--line); }
+.help details:last-child { border-bottom: 0; }
+.help summary {
+  list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 58px; padding: 12px 0; font-size: 19px; font-weight: 700;
+}
+.help summary::-webkit-details-marker { display: none; }
+.help summary::after {
+  content: ''; flex: none; width: 10px; height: 10px; margin-right: 6px;
+  border-right: 2.5px solid var(--text); border-bottom: 2.5px solid var(--text); transform: rotate(45deg) translateY(-3px); transition: transform .15s;
+}
+.help details[open] summary::after { transform: rotate(-135deg) translateY(-3px); }
+.help-b { font-size: 17px; line-height: 1.6; padding: 0 0 16px; }
+.help-b p { margin: 0 0 12px; }
+.help-b ol, .help-b ul { margin: 0 0 12px; padding-left: 24px; }
+.help-b li { margin-bottom: 8px; }
+.help-b li::marker { font-weight: 700; }
+.help-b .tip { background: var(--soft); border-radius: 12px; padding: 12px 14px; }
+.help-b .tip.warn { background: var(--danger-soft); color: var(--text); }
 
 /* ---------- Toast ---------- */
 .toast {

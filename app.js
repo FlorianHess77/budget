@@ -1,7 +1,7 @@
 'use strict';
 // Budget – Ausgaben erfassen, Monat im Blick. Reines JS, Daten lokal in IndexedDB.
 // Bei Änderungen APP_VER hochzählen, damit iPhone und Mac das Update bekommen.
-const APP_VER = '1.2.1';
+const APP_VER = '1.3.0';
 
 /* ---------- Hilfen ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -118,6 +118,7 @@ function route() {
   if (!S.setup) return renderWelcome();
   if (h.startsWith('#/settings')) return renderSettings();
   if (h.startsWith('#/stats')) return renderStats();
+  if (h.startsWith('#/help')) return renderHelp();
   if (h.startsWith('#/add')) { history.replaceState(null, '', '#/'); renderHome(); return openAdd(); }
   renderHome();
 }
@@ -138,7 +139,8 @@ function renderWelcome() {
           <label class="bud"><input class="num" inputmode="decimal" data-bud="${c.id}" placeholder="0" aria-label="Monatsbudget ${esc(c.name)}" value="${centsToInput(c.budget)}"><span>€</span></label>
         </div>`).join('')}
     </div>
-    <button class="btn primary" style="width:100%" data-a="finishSetup">Los geht's</button>`;
+    <button class="btn primary" style="width:100%" data-a="finishSetup">Los geht's</button>
+    <p class="note" style="text-align:center;padding-top:16px">Unten im Reiter <b>Hilfe</b> ist später alles Schritt für Schritt erklärt.</p>`;
 }
 
 /* ---------- Übersicht ---------- */
