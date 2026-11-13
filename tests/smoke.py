@@ -82,9 +82,17 @@ async def run(theme):
         await pg.click('#toast button'); await pg.wait_for_timeout(200)
         check(await pg.locator('.tx:has-text("Netflix")').count() == 1, f'{theme}: Rückgängig nach Löschen')
         # Filter
-        await pg.click('.cat:has-text("Lebensmittel")'); await pg.wait_for_timeout(150)
+        await pg.click('.cat:has-text("Lebensmittel") .cat-main'); await pg.wait_for_timeout(150)
         check(await pg.locator('.tx').count() == 1, f'{theme}: Filter nach Kategorie')
-        await pg.click('.cat:has-text("Lebensmittel")'); await pg.wait_for_timeout(150)
+        await pg.click('.cat:has-text("Lebensmittel") .cat-main'); await pg.wait_for_timeout(150)
+
+        # Plus direkt bei der Kategorie
+        await pg.click('.cat:has-text("Abos") .cat-add'); await pg.wait_for_timeout(150)
+        check(await pg.locator('.chip.on:has-text("Abos")').count() == 1, f'{theme}: Plus wählt die Kategorie vor')
+        await pg.fill('#fAmt', '9,99'); await pg.press('#fAmt', 'Enter'); await pg.wait_for_timeout(200)
+        check(await pg.evaluate("S.tx.filter(t=>t.amount===999).length") == 1 and await pg.locator('#sheet').is_hidden(), f'{theme}: Betrag + Enter speichert')
+        await pg.evaluate("S.tx = S.tx.filter(t=>t.amount!==999); save(); renderHome()")
+        await shot('04d-plus')
 
         # Bleibt nach Neuladen erhalten
         await pg.reload(); await pg.wait_for_timeout(400)
@@ -138,6 +146,14 @@ async def run(theme):
         await pg.fill('.set-row:has(input[value="Kleidung"]) [data-bud]', '80'); await pg.wait_for_timeout(100)
         check((await pg.inner_text('#budSum')).replace(' ', ' ') == '1.490 €', f'{theme}: Budgetsumme aktualisiert')
         await shot('06-einstellungen')
+        await pg.click('[data-a="fs"][data-f="xl"]'); await pg.wait_for_timeout(100)
+        check(await pg.evaluate("document.documentElement.dataset.fs") == 'xl', f'{theme}: Schriftgröße „Sehr groß“')
+        await pg.reload(); await pg.wait_for_timeout(300)
+        check(await pg.evaluate("document.documentElement.dataset.fs") == 'xl', f'{theme}: Schriftgröße bleibt nach Neuladen')
+        await pg.goto(BASE + '#/'); await pg.wait_for_timeout(300)
+        await shot('06b-sehr-gross')
+        await pg.goto(BASE + '#/settings'); await pg.wait_for_timeout(200)
+        await pg.click('[data-a="fs"][data-f="m"]'); await pg.wait_for_timeout(100)
         await pg.click('[data-tab="home"]'); await pg.wait_for_timeout(200)
         check(await pg.locator('.cat').count() == 6, f'{theme}: neue Kategorie in der Übersicht')
 

@@ -1,7 +1,7 @@
 'use strict';
 // Budget – Ausgaben erfassen, Monat im Blick. Reines JS, Daten lokal in IndexedDB.
 // Bei Änderungen APP_VER hochzählen, damit iPhone und Mac das Update bekommen.
-const APP_VER = '1.1.0';
+const APP_VER = '1.2.0';
 
 /* ---------- Hilfen ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -41,6 +41,12 @@ const centsToInput = c => c ? (c % 100 ? (c / 100).toFixed(2).replace('.', ',') 
 // Geprüfte Reihenfolge (farbschwächen-tauglich). Rot fehlt absichtlich – das ist der Warnung vorbehalten.
 const COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6'];
 const DAY = 864e5;
+// Schwarz oder Weiß – je nachdem, was auf der Farbe besser lesbar ist
+const inkOn = hex => {
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(c => c <= .03928 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4);
+  const L = .2126 * r + .7152 * g + .0722 * b;
+  return 1.05 / (L + .05) >= (L + .05) / .0611 ? '#FFFFFF' : '#0B0D11';
+};
 const daysIn = ym => new Date(+ym.slice(0, 4), +ym.slice(5, 7), 0).getDate();
 
 /* ---------- Speicher (IndexedDB) ---------- */
@@ -165,11 +171,14 @@ function renderHome() {
     else if (s > b) line = `<b class="num">${money0(s - b)}</b> über ${money0(b)}`;
     else if (s === b) line = `genau aufgebraucht · ${money0(b)}`;
     else line = `noch <b class="num">${money0(b - s)}</b> von ${money0(b)}${warn ? ' · <span class="tag-warn">fast aufgebraucht</span>' : ''}`;
-    return `<button class="cat${warn ? ' warn' : ''}" data-a="filter" data-id="${c.id}" aria-pressed="${UI.filter === c.id}">
-      <div class="cat-top"><span class="cat-n"><span class="dot" style="background:${c.color}"></span>${esc(c.name)}</span><span class="cat-v num">${money0(s)}</span></div>
-      <div class="cat-sub">${line}</div>
-      ${b ? `<div class="cat-bar"><div style="width:${Math.min(100, p * 100).toFixed(1)}%"></div></div>` : ''}
-    </button>`;
+    return `<div class="cat${warn ? ' warn' : ''}">
+      <button class="cat-main" data-a="filter" data-id="${c.id}" aria-pressed="${UI.filter === c.id}">
+        <div class="cat-top"><span class="cat-n"><span class="dot" style="background:${c.color}"></span>${esc(c.name)}</span><span class="cat-v num">${money0(s)}</span></div>
+        <div class="cat-sub">${line}</div>
+        ${b ? `<div class="cat-bar"><div style="width:${Math.min(100, p * 100).toFixed(1)}%"></div></div>` : ''}
+      </button>
+      ${c.archived ? '' : `<button class="cat-add" data-a="addTo" data-id="${c.id}" style="background:${c.color};color:${inkOn(c.color)}" aria-label="Ausgabe zu ${esc(c.name)} hinzufügen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>`}
+    </div>`;
   }).join('');
 
   let list = d.tx.slice().sort((a, b) => b.date.localeCompare(a.date) || (b.created || 0) - (a.created || 0));
@@ -220,7 +229,7 @@ function txRow(t) {
   const title = t.note || c.name;
   const sub = `${dayLabel(t.date)}${t.note ? ' · ' + esc(c.name) : ''}${t.recId && recById(t.recId) ? ' · <span class="rec-mark">monatlich</span>' : ''}`;
   return `<button class="tx" data-a="edit" data-id="${t.id}">
-    <span class="tx-ic" style="background:${c.color}22;color:${c.color}">${esc(c.name[0] || '?')}</span>
+    <span class="tx-ic" style="background:${c.color};color:${inkOn(c.color)}">${esc(c.name[0] || '?')}</span>
     <span class="tx-m"><div class="tx-t">${esc(title)}</div><div class="tx-d">${sub}</div></span>
     <span class="tx-a num${t.type === 'in' ? ' in' : ''}">${t.type === 'in' ? '+' : '−'}${money(t.amount)}</span>
   </button>`;
@@ -228,8 +237,8 @@ function txRow(t) {
 
 /* ---------- Erfassen / Bearbeiten (Buchung oder wiederkehrend) ---------- */
 // UI.sheet.mode: 'tx' = einzelne Buchung, 'rec' = wiederkehrende Buchung
-function openAdd(edit) {
-  const t = edit ? { ...edit, mode: 'tx' } : { mode: 'tx', type: 'out', amount: 0, cat: null, date: todayISO(), note: '', repeat: false };
+function openAdd(edit, cat) {
+  const t = edit ? { ...edit, mode: 'tx' } : { mode: 'tx', type: (cat && catById(cat)?.kind) || 'out', amount: 0, cat: cat || null, date: todayISO(), note: '', repeat: false, preset: !!cat };
   openSheet(t, edit ? 'Buchung bearbeiten' : 'Neue Buchung', !!edit);
 }
 function openRec(edit) {
@@ -270,11 +279,11 @@ function drawAdd(keepInputs) {
     ${instant ? `<label class="tgl"><input type="checkbox" id="fRepeat" ${t.repeat ? 'checked' : ''}><span>Jeden Monat wiederholen</span></label>` : ''}
     ${rec && !edit ? `<label class="tgl" id="fNowRow"${day > new Date().getDate() ? ' hidden' : ''}><input type="checkbox" id="fNow" ${t.now ? 'checked' : ''}><span>Auch für ${monthName(curM)} schon buchen</span></label>` : ''}
     ${parent ? `<p class="note" style="padding:0 2px 12px">Gehört zu „${esc(parent.note || catById(parent.cat)?.name)}“ (monatlich). Änderungen gelten nur für diese Buchung.</p>` : ''}
-    <p class="pick-h">${instant ? 'Kategorie antippen – wird sofort gespeichert' : 'Kategorie'}</p>
+    <p class="pick-h">${instant && !t.preset ? 'Kategorie antippen – wird sofort gespeichert' : 'Kategorie'}</p>
     <div class="chips">
       ${cats.map(c => `<button class="chip${t.cat === c.id ? ' on' : ''}" data-a="pick" data-id="${c.id}"><span class="dot" style="background:${c.color}"></span>${esc(c.name)}</button>`).join('')}
     </div>
-    ${instant ? '' : `<div class="sheet-foot">${edit ? `<button class="btn danger" data-a="${rec ? 'delRec' : 'delTx'}">Löschen</button>` : ''}<button class="btn primary wide" data-a="saveTx">Speichern</button></div>`}
+    ${instant && !t.preset ? '' : `<div class="sheet-foot">${edit ? `<button class="btn danger" data-a="${rec ? 'delRec' : 'delTx'}">Löschen</button>` : ''}<button class="btn primary wide" data-a="saveTx">Speichern</button></div>`}
     ${rec && edit ? `<p class="note" style="padding:12px 2px 0">Änderungen gelten ab der nächsten Buchung. Bereits gebuchte Monate bleiben, wie sie sind.</p>` : ''}`;
 }
 function readSheet() {
@@ -293,7 +302,7 @@ function readSheet() {
 async function commitTx() {
   const t = readSheet(); if (!t) return;
   const isNew = !t.id;
-  const { mode, repeat, now, ...data } = t;
+  const { mode, repeat, now, preset, ...data } = t;
   let msg;
   if (mode === 'rec') {
     const curM = monthOf(todayISO());
@@ -339,6 +348,7 @@ function renderSettings() {
   const out = activeCats('out'), inc = activeCats('in');
   const sum = out.reduce((a, c) => a + (c.budget || 0), 0);
   const theme = (() => { try { return localStorage.getItem('budget.theme') || 'auto'; } catch (e) { return 'auto'; } })();
+  const fs = document.documentElement.dataset.fs || 'm';
   const row = (c, withBudget) => `
     <div class="set-row">
       <button class="dot" style="background:${c.color}" data-a="color" data-id="${c.id}" aria-label="Farbe von ${esc(c.name)} ändern"></button>
@@ -358,7 +368,7 @@ function renderSettings() {
     <div class="card">
       ${S.rec.slice().sort((a, b) => a.day - b.day).map(r => { const c = catById(r.cat) || { name: '?', color: '#888' }; return `
         <button class="tx" data-a="editRec" data-id="${r.id}">
-          <span class="tx-ic" style="background:${c.color}22;color:${c.color}">${r.day}.</span>
+          <span class="tx-ic" style="background:${c.color};color:${inkOn(c.color)}">${r.day}.</span>
           <span class="tx-m"><div class="tx-t">${esc(r.note || c.name)}</div><div class="tx-d">jeden Monat am ${r.day}. · ${esc(c.name)}</div></span>
           <span class="tx-a num${r.type === 'in' ? ' in' : ''}">${r.type === 'in' ? '+' : '−'}${money(r.amount)}</span>
         </button>`; }).join('') || '<p class="note">Miete, Versicherung, Abos – einmal anlegen, dann bucht die App sie jeden Monat selbst.</p>'}
@@ -380,6 +390,11 @@ function renderSettings() {
     </div>
     <div class="sec-h"><h2>Darstellung</h2></div>
     <div class="card">
+      <p class="pick-h" style="margin:14px 2px 0">Schriftgröße</p>
+      <div class="theme fs">
+        ${[['m', 'Normal'], ['l', 'Groß'], ['xl', 'Sehr groß']].map(([k, l]) => `<button data-a="fs" data-f="${k}" class="${fs === k ? 'on' : ''}">${l}</button>`).join('')}
+      </div>
+      <p class="pick-h" style="margin:6px 2px 0">Farben</p>
       <div class="theme">
         ${[['auto', 'Automatisch'], ['light', 'Hell'], ['dark', 'Dunkel']].map(([k, l]) => `<button data-a="theme" data-t="${k}" class="${theme === k ? 'on' : ''}">${l}</button>`).join('')}
       </div>
@@ -495,6 +510,13 @@ function toast(msg, action) {
 /* ---------- Aktionen ---------- */
 const A = {
   add() { openAdd(); },
+  addTo(el) { openAdd(null, el.dataset.id); },
+  fs(el) {
+    const f = el.dataset.f;
+    try { f === 'm' ? localStorage.removeItem('budget.fs') : localStorage.setItem('budget.fs', f); } catch (e) {}
+    if (f === 'm') delete document.documentElement.dataset.fs; else document.documentElement.dataset.fs = f;
+    renderSettings();
+  },
   closeSheet,
   edit(el) { const t = S.tx.find(x => x.id === el.dataset.id); if (t) openAdd(t); },
   type(el) {
@@ -503,7 +525,7 @@ const A = {
   },
   pick(el) {
     UI.sheet.cat = el.dataset.id;
-    if (UI.sheet.id || UI.sheet.mode === 'rec') { document.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c === el)); $('#fErr').hidden = true; return; }
+    if (UI.sheet.id || UI.sheet.mode === 'rec' || UI.sheet.preset) { document.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c === el)); $('#fErr').hidden = true; return; }
     commitTx();
   },
   saveTx: commitTx,
@@ -599,7 +621,7 @@ document.addEventListener('change', async e => {
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet();
-  if (e.key === 'Enter' && UI.sheet && e.target.closest('#sheet') && e.target.tagName === 'INPUT' && UI.sheet.id) { e.preventDefault(); commitTx(); }
+  if (e.key === 'Enter' && UI.sheet && e.target.closest('#sheet') && e.target.tagName === 'INPUT' && (UI.sheet.id || UI.sheet.preset || UI.sheet.mode === 'rec')) { e.preventDefault(); commitTx(); }
   // Mac: „n" öffnet Erfassen
   if (e.key === 'n' && !e.metaKey && !e.ctrlKey && S.setup && $('#sheet').hidden && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) { e.preventDefault(); openAdd(); }
 });
