@@ -16,13 +16,15 @@ def check(cond, msg):
 today = datetime.date.today()
 last_month = (today.replace(day=1) - datetime.timedelta(days=1)).isoformat()
 early = today.replace(day=1).isoformat()
+prev_first = (today.replace(day=1) - datetime.timedelta(days=1)).replace(day=1).isoformat()
 
-async def add(pg, amount, cat, note='', date=None, income=False):
+async def add(pg, amount, cat, note='', date=None, income=False, repeat=False):
     await pg.click('.nav-add'); await pg.wait_for_timeout(150)
     if income: await pg.click('.seg [data-t="in"]')
     await pg.fill('#fAmt', amount)
     if note: await pg.fill('#fNote', note)
     if date: await pg.fill('#fDate', date)
+    if repeat: await pg.check('#fRepeat')
     await pg.click(f'.chip:has-text("{cat}")'); await pg.wait_for_timeout(200)
 
 async def run(theme):
@@ -49,7 +51,10 @@ async def run(theme):
         await shot('03-erfassen')
         await pg.click('.sheet-head [data-a="closeSheet"]')
 
-        await add(pg, '650', 'Wohnen', 'Miete', early)
+        # Miete monatlich ab Vormonat → dieser Monat wird automatisch gebucht
+        await add(pg, '650', 'Wohnen', 'Miete', prev_first, repeat=True)
+        check(await pg.evaluate("S.tx.filter(t=>t.note==='Miete').length") == 2, f'{theme}: Miete für Vormonat und diesen Monat gebucht')
+        check(await pg.locator('.rec-mark').count() >= 1, f'{theme}: Kennzeichnung „monatlich“')
         await add(pg, '84,30', 'Lebensmittel', 'Billa')
         await add(pg, '1.234,56', 'Freizeit', 'Urlaub Anzahlung', early)
         await add(pg, '170', 'Auto', 'Service')
@@ -84,9 +89,51 @@ async def run(theme):
         # Bleibt nach Neuladen erhalten
         await pg.reload(); await pg.wait_for_timeout(400)
         check(await pg.locator('.tx').count() == 6, f'{theme}: Daten bleiben nach Neuladen')
+        check(await pg.evaluate("S.tx.filter(t=>t.note==='Miete').length") == 2, f'{theme}: keine doppelte Miete nach Neuladen')
 
         # Einstellungen
+        # Backup-Erinnerung
+        await pg.evaluate("S.firstUse = Date.now() - 40*864e5; renderHome()")
+        check(await pg.locator('.nag').count() == 1, f'{theme}: Backup-Erinnerung nach 30 Tagen')
+        await shot('04c-erinnerung')
+        await pg.click('[data-a="snooze"]'); await pg.wait_for_timeout(150)
+        check(await pg.locator('.nag').count() == 0, f'{theme}: „Später“ blendet Erinnerung aus')
+
+        # Auswertung
+        await pg.click('[data-tab="stats"]'); await pg.wait_for_timeout(250)
+        check(await pg.locator('.sh').count() == 5, f'{theme}: 5 Kategorien in „Wohin ging das Geld“')
+        check(await pg.locator('.col').count() == 12, f'{theme}: 12 Monatssäulen')
+        check(await pg.locator('.col path.over').count() == 1, f'{theme}: aktueller Monat rot (über Budget)')
+        await shot('09-auswertung')
+        await pg.locator('.col').nth(10).click(); await pg.wait_for_timeout(200)
+        check('Wohnen' in await pg.inner_text('.card') and await pg.locator('.sh').count() == 2, f'{theme}: Tipp auf Säule zeigt Vormonat')
+        await pg.click('[data-a="month"][data-d="1"]'); await pg.wait_for_timeout(150)
+
+        # CSV und Backup
+        csv = await pg.evaluate("csvText()")
+        check(csv.splitlines()[0].endswith('Datum;Typ;Kategorie;Betrag;Notiz') and len(csv.splitlines()) == 9 and '-1234,56' in csv, f'{theme}: CSV mit 8 Buchungen')
+        backup = await pg.evaluate("JSON.stringify({app:'budget',version:1,exported:new Date().toISOString(),cats:S.cats,tx:S.tx,rec:S.rec})")
+        bfile = os.path.join(OUT, f'{theme}-backup.json'); open(bfile, 'w').write(backup)
+        await pg.evaluate("S.tx = S.tx.slice(0,2); save(); route()")
+        pg.once('dialog', lambda d: asyncio.ensure_future(d.accept()))
+        await pg.set_input_files('#fileBackup', bfile); await pg.wait_for_timeout(400)
+        check(await pg.evaluate("S.tx.length") == 8, f'{theme}: Backup laden stellt alle Buchungen wieder her')
+        bad = os.path.join(OUT, 'bad.json'); open(bad, 'w').write('{"hallo":1}')
+        await pg.set_input_files('#fileBackup', bad); await pg.wait_for_timeout(300)
+        check(await pg.evaluate("S.tx.length") == 8 and 'kein gültiges' in await pg.inner_text('#toast'), f'{theme}: ungültige Datei wird abgelehnt')
+
         await pg.click('[data-tab="settings"]'); await pg.wait_for_timeout(200)
+        # Monatliche Buchung in den Einstellungen
+        await pg.click('[data-a="addRec"]'); await pg.wait_for_timeout(150)
+        await pg.fill('#fAmt', '45'); await pg.select_option('#fDay', '1'); await pg.fill('#fNote', 'Versicherung')
+        await pg.click('.chip:has-text("Auto")')
+        check(await pg.locator('#fNow').is_checked(), f'{theme}: „Auch diesen Monat buchen“ vorausgewählt')
+        await shot('10-monatlich')
+        await pg.click('[data-a="saveTx"]'); await pg.wait_for_timeout(200)
+        check(await pg.locator('[data-a="editRec"]').count() == 2, f'{theme}: 2 monatliche Buchungen in den Einstellungen')
+        check(await pg.evaluate("S.tx.filter(t=>t.note==='Versicherung').length") == 1, f'{theme}: Versicherung sofort gebucht')
+        await pg.evaluate("materialize()")
+        check(await pg.evaluate("S.tx.filter(t=>t.note==='Versicherung').length") == 1, f'{theme}: keine doppelte Buchung')
         await pg.fill('.add-cat[data-form="out"] input', 'Kleidung'); await pg.click('.add-cat[data-form="out"] button'); await pg.wait_for_timeout(200)
         await pg.fill('.set-row:has(input[value="Kleidung"]) [data-bud]', '80'); await pg.wait_for_timeout(100)
         check((await pg.inner_text('#budSum')).replace(' ', ' ') == '1.490 €', f'{theme}: Budgetsumme aktualisiert')

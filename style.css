@@ -64,6 +64,11 @@ button { cursor: pointer; }
   background: var(--card); border-top: 1px solid var(--line);
 }
 .nav-brand { display: none; }
+@media (max-width: 899px) {
+  .nav { display: grid; grid-template-columns: repeat(4, 1fr); justify-items: center; }
+  .nav-i[data-tab="home"] { order: 1; } .nav-i[data-tab="stats"] { order: 2; } .nav-add { order: 3; } .nav-i[data-tab="settings"] { order: 4; }
+  .nav-i { width: 100%; }
+}
 .nav-i {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
   color: var(--muted); text-decoration: none; font-size: 13px; padding: 8px 0;
@@ -71,7 +76,7 @@ button { cursor: pointer; }
 .nav-i svg, .nav-add svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .nav-i.on { color: var(--text); font-weight: 700; }
 .nav-add {
-  width: 64px; height: 64px; border-radius: 50%; border: 0; margin: 0 18px;
+  width: 64px; height: 64px; border-radius: 50%; border: 0; margin: 0;
   background: var(--accent); color: var(--accent-ink);
   display: grid; place-items: center; box-shadow: var(--shadow);
   transform: translateY(-14px);
@@ -215,6 +220,52 @@ button { cursor: pointer; }
 .theme button { height: 48px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--card); font-size: 16px; }
 .theme button.on { border-color: var(--text); font-weight: 700; background: var(--soft); }
 .note { font-size: 15px; color: var(--muted); padding: 10px 0 14px; }
+
+/* Schalter im Erfassen-Fenster */
+.tgl { display: flex; align-items: center; gap: 12px; min-height: 48px; margin: -4px 0 12px; font-size: 17px; cursor: pointer; }
+.tgl input { width: 24px; height: 24px; accent-color: var(--accent); margin: 0 0 0 2px; flex: none; }
+.rec-mark { font-weight: 700; color: var(--text); }
+
+/* Backup-Erinnerung */
+.nag { background: var(--soft); border-radius: var(--r); padding: 14px 16px; margin: 0 0 8px; }
+.nag p { margin: 0 0 12px; font-size: 16px; color: var(--muted); }
+.nag p b { color: var(--text); display: block; }
+.nag-b { display: flex; gap: 10px; justify-content: flex-end; }
+.nag-b .btn { height: 46px; }
+.data-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 14px 0 4px; }
+.data-btns .btn:last-child { grid-column: 1 / -1; }
+
+/* Auswertung */
+.sh { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.sh:last-child { border-bottom: 0; }
+.sh-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.sh-bar { flex: 1; height: 10px; }
+.sh-bar > div { height: 100%; border-radius: 0 4px 4px 0; min-width: 3px; }
+.sh-p { font-size: 15px; color: var(--muted); width: 44px; text-align: right; }
+.chart { padding-top: 14px; }
+.cols { display: block; width: 100%; height: auto; overflow: visible; }
+.cols .col { cursor: pointer; }
+.cols .col path { fill: var(--bar); opacity: .55; }
+.cols .col.sel path { opacity: 1; }
+.cols .col path.over { fill: var(--danger); }
+.cols .col:hover path { opacity: 1; }
+.cols .lbl { font-size: 11.5px; fill: var(--muted); font-family: var(--font); }
+.cols .col.sel .lbl { fill: var(--text); font-weight: 700; }
+.cols .val { font-size: 13px; font-weight: 700; fill: var(--text); font-family: var(--font); }
+.cols .axis { stroke: var(--line); stroke-width: 1; }
+.cols .bud-l { stroke: var(--muted); stroke-width: 1; opacity: .6; }
+.cols .bud-t { font-size: 12px; fill: var(--muted); font-family: var(--font); }
+.chart-sum { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 14px 0 8px; }
+.chart-sum div { background: var(--soft); border-radius: 12px; padding: 10px 12px; }
+.chart-sum span { display: block; font-size: 14px; color: var(--muted); }
+.chart-sum b { font-size: 19px; }
+.key-over { display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: var(--danger); margin-right: 8px; vertical-align: -1px; }
+.tbl { padding: 0 18px; }
+.tbl summary { padding: 14px 0; font-weight: 700; cursor: pointer; color: var(--accent); }
+.tbl table { width: 100%; border-collapse: collapse; font-size: 15px; margin-bottom: 12px; }
+.tbl th { text-align: left; color: var(--muted); font-weight: 400; padding: 6px 0; }
+.tbl td { padding: 8px 0; border-top: 1px solid var(--line); }
+.tbl th:not(:first-child), .tbl td:not(:first-child) { text-align: right; }
 
 /* ---------- Toast ---------- */
 .toast {

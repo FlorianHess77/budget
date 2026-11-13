@@ -33,6 +33,10 @@
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
     <span class="nav-add-l">Erfassen</span>
   </button>
+  <a href="#/stats" data-tab="stats" class="nav-i">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V12M12 20V5M19 20v-9"/></svg>
+    <span>Auswertung</span>
+  </a>
   <a href="#/settings" data-tab="settings" class="nav-i">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
     <span>Einstellungen</span>
@@ -56,6 +60,7 @@
 </div>
 
 <div id="toast" class="toast" role="status" hidden></div>
+<input id="fileBackup" type="file" accept="application/json,.json" hidden>
 
 <script src="app.js"></script>
 </body>
