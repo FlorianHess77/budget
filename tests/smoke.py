@@ -1,0 +1,106 @@
+"""Durchklick-Test am iPhone- und Mac-Format mit Screenshots (python3 tests/smoke.py)."""
+import asyncio, os, threading, http.server, socketserver, functools, datetime
+from playwright.async_api import async_playwright
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT = os.environ.get('SHOTS', os.path.join(ROOT, 'tests', '_shots')); os.makedirs(OUT, exist_ok=True)
+class Q(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, *a): pass
+srv = socketserver.ThreadingTCPServer(('127.0.0.1', 0), functools.partial(Q, directory=ROOT)); srv.daemon_threads = True
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+BASE = f'http://127.0.0.1:{srv.server_address[1]}/'
+errors = []
+def check(cond, msg):
+    print(('ok   ' if cond else 'FAIL ') + msg)
+    if not cond: errors.append(msg)
+
+today = datetime.date.today()
+last_month = (today.replace(day=1) - datetime.timedelta(days=1)).isoformat()
+early = today.replace(day=1).isoformat()
+
+async def add(pg, amount, cat, note='', date=None, income=False):
+    await pg.click('.nav-add'); await pg.wait_for_timeout(150)
+    if income: await pg.click('.seg [data-t="in"]')
+    await pg.fill('#fAmt', amount)
+    if note: await pg.fill('#fNote', note)
+    if date: await pg.fill('#fDate', date)
+    await pg.click(f'.chip:has-text("{cat}")'); await pg.wait_for_timeout(200)
+
+async def run(theme):
+    async with async_playwright() as p:
+        b = await p.chromium.launch()
+        ctx = await b.new_context(viewport={'width': 390, 'height': 844}, device_scale_factor=2, has_touch=True, is_mobile=True,
+                                  locale='de-AT', color_scheme=theme)
+        pg = await ctx.new_page()
+        pg.on('pageerror', lambda e: errors.append(f'{theme}: JS-Fehler {e}'))
+        pg.on('console', lambda m: m.type == 'error' and 'fonts.g' not in (m.location.get('url') or '') and errors.append(f'{theme}: console {m.text}'))
+        shot = lambda n: pg.screenshot(path=f'{OUT}/{theme}-{n}.png', full_page=True)
+        await pg.goto(BASE); await pg.wait_for_timeout(400)
+        await shot('01-willkommen')
+        for cat, v in [('Wohnen', '650'), ('Lebensmittel', '380'), ('Auto', '200'), ('Freizeit', '120'), ('Abos', '60')]:
+            await pg.fill(f'.set-row:has-text("{cat}") input', v)
+        await pg.click('[data-a="finishSetup"]'); await pg.wait_for_timeout(300)
+        await shot('02-leer')
+        check(await pg.locator('.cat').count() == 5, f'{theme}: 5 Kategorien in der Übersicht')
+
+        # Ohne Betrag → Hinweis, nichts gespeichert
+        await pg.click('.nav-add'); await pg.wait_for_timeout(150)
+        await pg.click('.chip:has-text("Auto")'); await pg.wait_for_timeout(100)
+        check(await pg.locator('#fErr').is_visible(), f'{theme}: Hinweis bei fehlendem Betrag')
+        await shot('03-erfassen')
+        await pg.click('.sheet-head [data-a="closeSheet"]')
+
+        await add(pg, '650', 'Wohnen', 'Miete', early)
+        await add(pg, '84,30', 'Lebensmittel', 'Billa')
+        await add(pg, '1.234,56', 'Freizeit', 'Urlaub Anzahlung', early)
+        await add(pg, '170', 'Auto', 'Service')
+        await add(pg, '12.99', 'Abos', 'Netflix')
+        await add(pg, '2400', 'Gehalt', 'Lohn', early, income=True)
+        await add(pg, '55', 'Lebensmittel', 'Spar', last_month)
+        check(await pg.locator('h1').inner_text() == ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'][int(last_month[5:7])-1] + ' ' + last_month[:4], f'{theme}: springt in den Monat der Buchung')
+        await pg.click('[data-a="month"][data-d="1"]'); await pg.wait_for_timeout(200)
+        spent = await pg.inner_text('#spent')
+        check(spent.replace(' ', ' ') == '2.151,85 €', f'{theme}: Monatsausgaben 2.151,85 € (ist {spent})')
+        check(await pg.locator('.cat.warn').count() == 2, f'{theme}: Auto und Freizeit als Warnung')
+        check('Saldo' in await pg.inner_text('.hero'), f'{theme}: Einnahmen und Saldo angezeigt')
+        await shot('04-uebersicht')
+
+        # Bearbeiten
+        await pg.click('.tx:has-text("Billa")'); await pg.wait_for_timeout(150)
+        await shot('05-bearbeiten')
+        await pg.fill('#fAmt', '90')
+        await pg.click('[data-a="saveTx"]'); await pg.wait_for_timeout(200)
+        check((await pg.inner_text('#spent')).replace(' ', ' ') == '2.157,55 €', f'{theme}: Bearbeiten ändert die Summe')
+        # Löschen + Rückgängig
+        await pg.click('.tx:has-text("Netflix")'); await pg.wait_for_timeout(150)
+        await pg.click('[data-a="delTx"]'); await pg.wait_for_timeout(200)
+        check(await pg.locator('.tx:has-text("Netflix")').count() == 0, f'{theme}: Löschen')
+        await pg.click('#toast button'); await pg.wait_for_timeout(200)
+        check(await pg.locator('.tx:has-text("Netflix")').count() == 1, f'{theme}: Rückgängig nach Löschen')
+        # Filter
+        await pg.click('.cat:has-text("Lebensmittel")'); await pg.wait_for_timeout(150)
+        check(await pg.locator('.tx').count() == 1, f'{theme}: Filter nach Kategorie')
+        await pg.click('.cat:has-text("Lebensmittel")'); await pg.wait_for_timeout(150)
+
+        # Bleibt nach Neuladen erhalten
+        await pg.reload(); await pg.wait_for_timeout(400)
+        check(await pg.locator('.tx').count() == 6, f'{theme}: Daten bleiben nach Neuladen')
+
+        # Einstellungen
+        await pg.click('[data-tab="settings"]'); await pg.wait_for_timeout(200)
+        await pg.fill('.add-cat[data-form="out"] input', 'Kleidung'); await pg.click('.add-cat[data-form="out"] button'); await pg.wait_for_timeout(200)
+        await pg.fill('.set-row:has(input[value="Kleidung"]) [data-bud]', '80'); await pg.wait_for_timeout(100)
+        check((await pg.inner_text('#budSum')).replace(' ', ' ') == '1.490 €', f'{theme}: Budgetsumme aktualisiert')
+        await shot('06-einstellungen')
+        await pg.click('[data-tab="home"]'); await pg.wait_for_timeout(200)
+        check(await pg.locator('.cat').count() == 6, f'{theme}: neue Kategorie in der Übersicht')
+
+        # Mac-Format
+        await pg.set_viewport_size({'width': 1280, 'height': 860}); await pg.wait_for_timeout(200)
+        await pg.screenshot(path=f'{OUT}/{theme}-07-mac.png')
+        await pg.click('.nav-add'); await pg.wait_for_timeout(200)
+        await pg.screenshot(path=f'{OUT}/{theme}-08-mac-erfassen.png')
+        await b.close()
+
+asyncio.run(run('light'))
+asyncio.run(run('dark'))
+print('\n' + ('ALLES OK' if not errors else f'{len(errors)} Fehler:\n' + '\n'.join(errors)))
