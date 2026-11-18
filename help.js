@@ -19,7 +19,7 @@ const HELP = [
       <li><b>Farbiges Plus</b> neben einer Kategorie auf der Übersicht. Die Kategorie ist dann schon gewählt. Betrag eintippen und <b>Speichern</b> drücken (oder die Eingabetaste).</li>
     </ol>
     <p>Ins große Feld <b>Notiz</b> schreibst du, wofür das Geld war, z. B. „Billa“ – dann findest du die Buchung später leicht wieder. Das Datum kannst du ändern, sonst gilt heute.</p>
-    <p>Unter dem Notizfeld stehen deine <b>häufigsten Notizen</b>. Ein Tipp darauf füllt die Notiz aus – und wählt beim großen Plus gleich die passende Kategorie. Dann nur noch <b>Speichern</b> drücken.</p>
+    <p>Unter dem Notizfeld stehen deine <b>häufigsten Notizen</b>. Sobald du tippst, zeigt die App nur noch die passenden – z. B. bei „bi“ deine frühere Notiz „Billa“. Ein Tipp auf einen Vorschlag füllt die Notiz aus und wählt beim großen Plus gleich die passende Kategorie. Was du selbst tippst, wird nie automatisch verändert.</p>
     <p class="tip">Am Mac öffnet die Taste <b>N</b> das Erfassen.</p>`
   },
   {

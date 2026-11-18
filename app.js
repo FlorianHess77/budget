@@ -1,7 +1,7 @@
 'use strict';
 // Budget – Ausgaben erfassen, Monat im Blick. Reines JS, Daten lokal in IndexedDB.
 // Bei Änderungen APP_VER hochzählen, damit iPhone und Mac das Update bekommen.
-const APP_VER = '1.5.1';
+const APP_VER = '1.6.0';
 
 /* ---------- Hilfen ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -148,7 +148,7 @@ function renderWelcome() {
         <div class="set-row">
           <span class="dot" style="background:${c.color}"></span>
           <span style="flex:1;font-size:17px;font-weight:700">${esc(c.name)}</span>
-          <label class="bud"><input class="num" inputmode="decimal" data-bud="${c.id}" placeholder="0" aria-label="Monatsbudget ${esc(c.name)}" value="${centsToInput(c.budget)}"><span>€</span></label>
+          <label class="bud"><input class="num" inputmode="decimal" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" data-bud="${c.id}" placeholder="0" aria-label="Monatsbudget ${esc(c.name)}" value="${centsToInput(c.budget)}"><span>€</span></label>
         </div>`).join('')}
     </div>
     <button class="btn primary" style="width:100%" data-a="finishSetup">Los geht's</button>
@@ -282,10 +282,10 @@ function drawAdd(keepInputs) {
       <button role="tab" data-a="type" data-t="out" class="${t.type === 'out' ? 'on' : ''}" aria-selected="${t.type === 'out'}">Ausgabe</button>
       <button role="tab" data-a="type" data-t="in" class="${t.type === 'in' ? 'on' : ''}" aria-selected="${t.type === 'in'}">Einnahme</button>
     </div>
-    <label class="amt"><input id="fAmt" class="num" inputmode="decimal" autocomplete="off" placeholder="0,00" aria-label="Betrag in Euro" value="${prev ? esc(prev.amt) : centsToInput(t.amount)}"><span>€</span></label>
+    <label class="amt"><input id="fAmt" class="num" inputmode="decimal" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" placeholder="0,00" aria-label="Betrag in Euro" value="${prev ? esc(prev.amt) : centsToInput(t.amount)}"><span>€</span></label>
     <div class="err" id="fErr" hidden></div>
-    <label class="note-f"><span>Notiz – wofür?</span><input id="fNote" placeholder="${t.type === 'out' ? (rec ? 'z. B. Miete, Handy, Netflix' : 'z. B. Billa, Tanken, Friseur') : 'z. B. Lohn'}" value="${esc(prev ? prev.note : t.note)}" maxlength="60" enterkeyhint="done" autocapitalize="sentences"></label>
-    <div class="sugg" id="fSugg">${suggHtml()}</div>
+    <label class="note-f"><span>Notiz – wofür?</span><input id="fNote" placeholder="${t.type === 'out' ? (rec ? 'z. B. Miete, Handy, Netflix' : 'z. B. Billa, Tanken, Friseur') : 'z. B. Lohn'}" value="${esc(prev ? prev.note : t.note)}" maxlength="60" enterkeyhint="done" autocapitalize="sentences" autocorrect="off" spellcheck="false" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" role="combobox" aria-autocomplete="list" aria-controls="fSugg"></label>
+    <div class="sugg" id="fSugg" role="listbox" aria-label="Vorschläge für die Notiz">${suggHtml(prev ? prev.note : t.note)}</div>
     ${rec
       ? `<div class="row2">
           <label class="fld"><span>Wie oft</span><select id="fEvery">${Object.entries(EVERY).map(([k, l]) => `<option value="${k}"${+k === +(prev?.every || t.every) ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
@@ -303,8 +303,11 @@ function drawAdd(keepInputs) {
     ${rec && edit ? `<p class="note" style="padding:12px 2px 0">Änderungen gelten ab der nächsten Buchung. Was schon gebucht ist, bleibt, wie es ist.</p>` : ''}`;
 }
 // Häufigste Notizen – aus der gewählten Kategorie, sonst aus allen (dann mit passender Kategorie)
-function topNotes(cat, type, n = 6) {
-  const m = new Map();
+// Eigene Vorschläge: frühere Notizen, gefiltert nach dem, was gerade getippt wird.
+// Nur Vorschläge – es wird nie etwas automatisch eingesetzt oder korrigiert.
+const fold = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ß/g, 'ss');
+function topNotes(cat, type, n = 6, q = '') {
+  const m = new Map(), fq = fold(q.trim());
   for (const t of S.tx) {
     if (t.type !== type || !t.note || (cat && t.cat !== cat)) continue;
     const k = t.note.trim().toLowerCase();
@@ -313,16 +316,36 @@ function topNotes(cat, type, n = 6) {
     if (t.date >= e.last) { e.last = t.date; e.note = t.note.trim(); }
     m.set(k, e);
   }
-  return [...m.values()].sort((a, b) => b.n - a.n || b.last.localeCompare(a.last)).slice(0, n)
-    .map(e => ({ note: e.note, cat: Object.entries(e.cats).sort((a, b) => b[1] - a[1])[0][0] }));
+  let list = [...m.values()];
+  if (fq) {
+    // Wortanfang zuerst ("bi" → "Billa"), dann irgendwo enthalten ("ll" → "Billa")
+    const rank = e => { const f = fold(e.note); return f === fq ? -1 : f.startsWith(fq) ? 0 : f.split(/[\s\-\/]+/).some(w => w.startsWith(fq)) ? 1 : f.includes(fq) ? 2 : 9; };
+    list = list.map(e => ({ ...e, r: rank(e) })).filter(e => e.r >= 0 && e.r < 9);
+    list.sort((a, b) => a.r - b.r || b.n - a.n || b.last.localeCompare(a.last));
+  } else list.sort((a, b) => b.n - a.n || b.last.localeCompare(a.last));
+  return list.slice(0, n).map(e => ({ note: e.note, cat: Object.entries(e.cats).sort((a, b) => b[1] - a[1])[0][0] }));
 }
-function suggHtml() {
+function markMatch(note, q) {
+  const fq = fold(q.trim()); if (!fq) return esc(note);
+  const i = fold(note).indexOf(fq); if (i < 0) return esc(note);
+  return esc(note.slice(0, i)) + '<b>' + esc(note.slice(i, i + fq.length)) + '</b>' + esc(note.slice(i + fq.length));
+}
+function suggHtml(text) {
   const t = UI.sheet; if (!t) return '';
+  const q = (text ?? $('#fNote')?.value ?? '').trim();
   const cat = t.cat && catById(t.cat) && !catById(t.cat).archived ? t.cat : null;
-  const list = topNotes(cat, t.type).filter(x => cat || activeCats(t.type).some(c => c.id === x.cat));
+  const ok = x => activeCats(t.type).some(c => c.id === x.cat);
+  let list = topNotes(cat, t.type, 6, q).filter(x => cat || ok(x));
+  // Beim Tippen: passende aus anderen Kategorien ergänzen, falls in der gewählten nichts passt
+  if (q && cat && list.length < 3) {
+    const seen = new Set(list.map(x => fold(x.note)));
+    list = list.concat(topNotes(null, t.type, 6, q).filter(x => ok(x) && !seen.has(fold(x.note)))).slice(0, 6);
+  }
+  list = list.filter(x => fold(x.note) !== fold(q)); // genau das Getippte nicht nochmal anbieten
   if (!list.length) return '';
-  return `<span class="sugg-l">${cat ? 'Häufig bei ' + esc(catById(cat).name) : 'Häufig'}:</span>` +
-    list.map(x => `<button type="button" data-a="sugg" data-note="${esc(x.note)}" data-cat="${x.cat}">${esc(x.note)}</button>`).join('');
+  const label = q ? 'Vorschläge' : cat ? 'Häufig bei ' + esc(catById(cat).name) : 'Häufig';
+  return `<span class="sugg-l">${label}:</span>` +
+    list.map(x => `<button type="button" role="option" data-a="sugg" data-note="${esc(x.note)}" data-cat="${x.cat}">${markMatch(x.note, q)}</button>`).join('');
 }
 function nextHint(iso) {
   if (!iso) return '';
@@ -412,8 +435,8 @@ function renderSettings() {
   const row = (c, withBudget) => `
     <div class="set-row">
       <button class="dot" style="background:${c.color}" data-a="color" data-id="${c.id}" aria-label="Farbe von ${esc(c.name)} ändern"></button>
-      <input class="name" data-name="${c.id}" value="${esc(c.name)}" maxlength="24" aria-label="Name der Kategorie">
-      ${withBudget ? `<label class="bud"><input class="num" inputmode="decimal" data-bud="${c.id}" placeholder="0" value="${centsToInput(c.budget)}" aria-label="Monatsbudget ${esc(c.name)}"><span>€</span></label>` : ''}
+      <input class="cat-rename" data-ren="${c.id}" value="${esc(c.name)}" maxlength="24" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" autocorrect="off" aria-label="Kategorie umbenennen">
+      ${withBudget ? `<label class="bud"><input class="num" inputmode="decimal" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" data-bud="${c.id}" placeholder="0" value="${centsToInput(c.budget)}" aria-label="Monatsbudget ${esc(c.name)}"><span>€</span></label>` : ''}
       <button class="icon-btn del" data-a="delCat" data-id="${c.id}" aria-label="${esc(c.name)} entfernen"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg></button>
     </div>`;
   $('#view').innerHTML = `
@@ -421,13 +444,13 @@ function renderSettings() {
     <div class="sec-h" style="margin-top:0"><h2>Ausgaben-Kategorien</h2><span>Budget pro Monat</span></div>
     <div class="card">
       ${out.map(c => row(c, true)).join('')}
-      <form class="add-cat" data-form="out"><input placeholder="Neue Kategorie" maxlength="24" aria-label="Neue Ausgaben-Kategorie"><button class="btn" type="submit">Hinzufügen</button></form>
+      <div class="add-cat" data-newcat="out"><input placeholder="Neue Kategorie" maxlength="24" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" aria-label="Neue Ausgaben-Kategorie" enterkeyhint="done"><button class="btn" type="button" data-a="newCat" data-kind="out">Hinzufügen</button></div>
       <div class="set-sum"><span>Monatsbudget gesamt</span><b class="num" id="budSum">${money0(sum)}</b></div>
     </div>
     <div class="sec-h"><h2>Einnahmen-Kategorien</h2></div>
     <div class="card">
       ${inc.map(c => row(c, false)).join('')}
-      <form class="add-cat" data-form="in"><input placeholder="Neue Kategorie" maxlength="24" aria-label="Neue Einnahmen-Kategorie"><button class="btn" type="submit">Hinzufügen</button></form>
+      <div class="add-cat" data-newcat="in"><input placeholder="Neue Kategorie" maxlength="24" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" aria-label="Neue Einnahmen-Kategorie" enterkeyhint="done"><button class="btn" type="button" data-a="newCat" data-kind="in">Hinzufügen</button></div>
     </div>
     <div class="sec-h"><h2>Daten</h2></div>
     <div class="card">
@@ -617,13 +640,14 @@ function toast(msg, action) {
 const A = {
   add() { openAdd(); },
   addTo(el) { openAdd(null, el.dataset.id); },
+  newCat(el) { addCategory(el.dataset.kind); },
   catHist(el) { UI.histAll = false; openHistory(el.dataset.id); },
   histAll() { UI.histAll = true; openHistory(UI.hist); },
   sugg(el) {
     const t = UI.sheet; if (!t) return;
     $('#fNote').value = el.dataset.note;
     if (!t.cat && catById(el.dataset.cat)) { t.cat = el.dataset.cat; t.preset = true; drawAdd(true); }
-    document.querySelectorAll('#fSugg button').forEach(b => b.classList.toggle('on', b.dataset.note === el.dataset.note));
+    $('#fSugg').innerHTML = suggHtml();
     const a = $('#fAmt'); if (!a.value) a.focus();
   },
   confirmYes() { const r = UI.confirm; UI.confirm = null; closeSheet(); r && r(true); },
@@ -711,20 +735,19 @@ document.addEventListener('click', e => {
   const fn = A[el.dataset.a]; if (!fn) return;
   e.preventDefault(); fn(el);
 });
-document.addEventListener('submit', async e => {
-  const f = e.target.closest('[data-form]'); if (!f) return;
-  e.preventDefault();
-  const name = f.querySelector('input').value.trim(); if (!name) return;
-  const kind = f.dataset.form;
-  S.cats.push({ id: uid(), name, kind, color: COLORS[S.cats.filter(c => c.kind === kind).length % COLORS.length], budget: 0 });
+async function addCategory(kind) {
+  const inp = document.querySelector(`[data-newcat="${kind}"] input`); if (!inp) return;
+  const label = inp.value.trim(); if (!label) return inp.focus();
+  S.cats.push({ id: uid(), name: label, kind, color: COLORS[S.cats.filter(c => c.kind === kind).length % COLORS.length], budget: 0 });
   await save(); renderSettings();
-  const inp = document.querySelector(`[data-form="${kind}"] input`); if (inp) inp.focus();
-});
+  const again = document.querySelector(`[data-newcat="${kind}"] input`); if (again) again.focus();
+}
 // Name & Budget direkt beim Tippen speichern
 document.addEventListener('input', e => {
   const el = e.target;
   if (el.id === 'fAmt') { const er = $('#fErr'); if (er) er.hidden = true; return; }
-  if (el.dataset.name) { const c = catById(el.dataset.name); if (el.value.trim()) { c.name = el.value.trim(); save(); } }
+  if (el.id === 'fNote') { const g = $('#fSugg'); if (g) g.innerHTML = suggHtml(); return; }
+  if (el.dataset.ren) { const c = catById(el.dataset.ren); if (el.value.trim()) { c.name = el.value.trim(); save(); } }
   if (el.dataset.bud && S.setup) {
     const c = catById(el.dataset.bud), v = parseMoney(el.value);
     c.budget = v > 0 ? v : 0; save();
@@ -745,6 +768,8 @@ document.addEventListener('change', async e => {
   }
 });
 document.addEventListener('keydown', e => {
+  const nc = e.target.closest && e.target.closest('[data-newcat]');
+  if (nc && e.key === 'Enter') { e.preventDefault(); addCategory(nc.dataset.newcat); return; }
   if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet();
   if (e.key === 'Enter' && UI.sheet && e.target.closest('#sheet') && e.target.tagName === 'INPUT' && (UI.sheet.id || UI.sheet.preset || UI.sheet.mode === 'rec')) { e.preventDefault(); commitTx(); }
   // Mac: „n" öffnet Erfassen

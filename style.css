@@ -245,8 +245,8 @@ button { cursor: pointer; }
 .set-row { display: flex; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .set-row:last-child { border-bottom: 0; }
 .set-row .dot { width: 16px; height: 16px; border-radius: 50%; flex: none; border: 0; padding: 0; }
-.set-row input.name { flex: 1; min-width: 0; height: 46px; border: 1.5px solid transparent; background: transparent; border-radius: 10px; padding: 0 6px; text-overflow: ellipsis; font-size: 17px; font-weight: 700; }
-.set-row input.name:focus { border-color: var(--line); background: var(--card); outline: none; }
+.set-row input.cat-rename { flex: 1; min-width: 0; height: 46px; border: 1.5px solid transparent; background: transparent; border-radius: 10px; padding: 0 6px; text-overflow: ellipsis; font-size: 17px; font-weight: 700; }
+.set-row input.cat-rename:focus { border-color: var(--line); background: var(--card); outline: none; }
 .set-row .bud { display: flex; align-items: center; gap: 4px; flex: none; }
 .set-row .bud input { width: 88px; height: 46px; border: 1.5px solid var(--line); border-radius: 10px; padding: 0 10px; text-align: right; font-size: 17px; background: var(--card); outline: none; }
 .set-row .bud input:focus { border-color: var(--accent); }
@@ -317,6 +317,9 @@ button { cursor: pointer; }
   background: var(--soft); font-size: 17px; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .sugg button.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.sugg button { font-weight: 400; }
+.sugg button b { font-weight: 700; }
+.sugg:not(:has(b)) button { font-weight: 700; }
 
 /* Verlauf einer Kategorie */
 .hist-sum { text-align: center; padding: 4px 0 0; }
