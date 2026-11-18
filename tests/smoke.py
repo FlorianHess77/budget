@@ -138,7 +138,7 @@ async def run(theme):
         check(await pg.locator('.col path.over').count() == 1, f'{theme}: aktueller Monat rot (über Budget)')
         await shot('09-auswertung')
         await pg.locator('.col').nth(10).click(); await pg.wait_for_timeout(200)
-        check('Lebensmittel' in await pg.inner_text('.card') and await pg.locator('.sh').count() == 1, f'{theme}: Tipp auf Säule zeigt Vormonat')
+        check('Lebensmittel' in await pg.inner_text('.sh') and await pg.locator('.sh').count() == 1, f'{theme}: Tipp auf Säule zeigt Vormonat')
         await pg.click('[data-a="month"][data-d="1"]'); await pg.wait_for_timeout(150)
 
         # CSV und Backup
@@ -222,6 +222,15 @@ async def run(theme):
         check(await pg.locator('[data-a="confirmYes"]').is_visible(), f'{theme}: Bestätigung vor dem Löschen von Fixkosten')
         await pg.click('[data-a="confirmYes"]'); await pg.wait_for_timeout(200)
         check(await pg.locator('.fx').count() == 3, f'{theme}: Vignette gelöscht')
+        # Später im Monat fälliger Kredit zählt schon zur Monatssumme
+        if (today + datetime.timedelta(days=1)).month == today.month:
+            await new_fix('Kredit', '115', '1', (today + datetime.timedelta(days=1)).isoformat())
+            check(await pg.evaluate("S.tx.filter(t=>t.note==='Kredit').length") == 0, f'{theme}: Kredit noch nicht abgebucht')
+            total = (await pg.inner_text('#fixSum')).replace('\u00a0', ' ')
+            check(total == '881,90 €', f'{theme}: Kredit zählt schon zur Monatssumme (ist {total})')
+            check('766,90' in (await pg.inner_text('#fixPaid')) and await pg.locator('.fxc:has-text("Kredit")').count() == 1, f'{theme}: „schon abgebucht“ und „kommt noch“')
+            await shot('10d-fixkosten-kredit')
+            await pg.click('.fx:has-text("Kredit")'); await pg.click('[data-a="delRec"]'); await pg.wait_for_timeout(100); await pg.click('[data-a="confirmYes"]'); await pg.wait_for_timeout(200)
         # Vormonat im Fixkosten-Reiter
         await pg.click('[data-a="month"][data-d="-1"]'); await pg.wait_for_timeout(150)
         check((await pg.inner_text('#fixSum')).replace('\u00a0', ' ') == '704,20 €', f'{theme}: Vormonat Miete 650 + Strom 54,20')
@@ -232,10 +241,13 @@ async def run(theme):
         await pg.click('[data-tab="home"]'); await pg.wait_for_timeout(200)
         check((await pg.inner_text('#spent')).replace('\u00a0', ' ') == '1.507,55 €', f'{theme}: Fixkosten zählen nicht zu den Ausgaben')
         check(await pg.locator('.tx:has-text("Miete"), .tx:has-text("Strom")').count() == 0, f'{theme}: keine Fixkosten in den Buchungen der Übersicht')
-        check('Fixkosten' in await pg.inner_text('.hero'), f'{theme}: Rest nach Ausgaben und Fixkosten')
+        check('ohne Fixkosten' in await pg.inner_text('.hero-l') and 'Fixkosten' in await pg.inner_text('.hero'), f'{theme}: Übersicht sagt „ohne Fixkosten“, Rest nach allem')
         await shot('04-uebersicht-getrennt')
         await pg.click('[data-tab="stats"]'); await pg.wait_for_timeout(200)
         check(await pg.locator('.sh').count() == 4, f'{theme}: Auswertung ohne Fixkosten')
+        g = lambda sel: pg.inner_text(sel)
+        check((await g('#sumOut')).replace('\u00a0', ' ') == '1.507,55 €' and (await g('#sumFix')).replace('\u00a0', ' ') == '766,90 €' and (await g('#sumAll')).replace('\u00a0', ' ') == '2.274,45 €', f'{theme}: Statistik rechnet Ausgaben und Fixkosten extra und zusammen')
+        await shot('09b-ueberblick')
         csv = await pg.evaluate("csvText()")
         check(';Fixkosten;' in csv, f'{theme}: CSV kennzeichnet Fixkosten')
         # Alte Daten (vor der Trennung) werden umgestellt

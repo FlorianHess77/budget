@@ -1,7 +1,7 @@
 'use strict';
 // Budget – Ausgaben erfassen, Monat im Blick. Reines JS, Daten lokal in IndexedDB.
 // Bei Änderungen APP_VER hochzählen, damit iPhone und Mac das Update bekommen.
-const APP_VER = '1.7.0';
+const APP_VER = '1.7.1';
 
 /* ---------- Hilfen ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -132,6 +132,22 @@ const lastAmount = r => S.tx.filter(t => t.recId === r.id).sort((a, b) => b.date
 const perMonth = r => typical(r) / every(r);
 const longDate = iso => { const d = new Date(iso + 'T12:00:00'); return `${d.getDate()}. ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
 const fixedIn = ym => S.tx.filter(t => t.fixed && (t.dueM || monthOf(t.date)) === ym);
+// Fixkosten eines Monats: schon abgebucht + noch fällig (offen oder kommt noch, schwankende geschätzt)
+function fixedMonth(ym) {
+  const today = todayISO(), cur = monthOf(today);
+  const paid = fixedIn(ym).reduce((a, t) => a + t.amount, 0);
+  const rest = [];
+  if (ym === cur) {
+    for (const r of S.rec) {
+      if (!isFixedRec(r)) continue;
+      const n = nextDue(r);
+      if (monthOf(n) === ym && n > today) rest.push({ r, amt: r.vary ? typical(r) : r.amount, open: false });
+    }
+  }
+  if (ym <= cur) for (const p of pendingList()) if (p.m === ym) rest.push({ r: p.r, amt: typical(p.r), open: true });
+  const restSum = rest.reduce((a, x) => a + x.amt, 0);
+  return { paid, rest, restSum, total: paid + restSum, estimated: rest.some(x => x.r.vary) };
+}
 // Schwankende Fixkosten, die fällig sind, aber noch keinen Betrag haben (bis 12 Monate zurück)
 function pendingList() {
   const today = todayISO(), from = shiftMonth(monthOf(today), -12), res = [];
@@ -257,11 +273,11 @@ function renderHome() {
   $('#view').innerHTML = `
     ${monthBar(ym)}
     <section class="hero">
-      <p class="hero-l">Ausgegeben im ${monthName(ym)}</p>
+      <p class="hero-l">Ausgaben im ${monthName(ym)} <span class="hero-tag">ohne Fixkosten</span></p>
       <p class="hero-n num" id="spent">${money(d.spent)}</p>
       <p class="hero-s">${sub}</p>
       ${budget ? `<div class="hero-bar${pct >= 0.8 ? ' warn' : ''}"><div style="width:${Math.min(100, pct * 100).toFixed(1)}%"></div></div>` : ''}
-      ${d.income ? (() => { const fx = fixedIn(ym).reduce((a, t) => a + t.amount, 0), bal = d.income - d.spent - fx; return `<p class="hero-in">Einnahmen <b class="num">${money0(d.income)}</b></p>
+      ${d.income ? (() => { const fx = fixedMonth(ym).total, bal = d.income - d.spent - fx; return `<p class="hero-in">Einnahmen <b class="num">${money0(d.income)}</b></p>
         <p class="hero-in" style="margin-top:2px">Nach Ausgaben${fx ? ' und Fixkosten' : ''} bleiben <b class="num" style="color:${bal < 0 ? 'var(--danger)' : 'var(--income)'}">${bal >= 0 ? '+' : '−'}${money0(Math.abs(bal))}</b></p>`; })() : ''}
     </section>
     ${backupNag()}
@@ -617,6 +633,7 @@ function renderFixed() {
   const recs = S.rec.filter(isFixedRec);
   const booked = fixedIn(ym).sort((a, b) => a.date.localeCompare(b.date));
   const sum = booked.reduce((a, t) => a + t.amount, 0);
+  const fm = fixedMonth(ym);
   const pend = pendingList();
   const coming = ym === now ? recs.filter(r => { const n = nextDue(r); return monthOf(n) === ym && n > today; }).sort((a, b) => nextDue(a).localeCompare(nextDue(b))) : [];
   const pm = recs.reduce((a, r) => a + perMonth(r), 0);
@@ -645,24 +662,27 @@ function renderFixed() {
       <span class="fx-a"><span class="tx-a num">${amt}</span>${e > 1 ? `<span class="fx-pm num">≈ ${money0(perMonth(r))} / Monat</span>` : ''}</span>
     </button>`;
   };
-  let sub;
-  if (!recs.length) sub = 'Miete, Strom, Versicherung – einmal eintragen, die App kümmert sich um den Rest.';
-  else if (pend.length) sub = `<b style="color:var(--danger)">${pend.length > 1 ? pend.length + ' Beträge' : '1 Betrag'} noch einzutragen</b>`;
-  else if (coming.length) sub = `Kommt noch: <b class="num">${coming.length}</b> · im Schnitt ≈ ${money0(pm)} pro Monat`;
-  else sub = `Im Schnitt ≈ <b class="num">${money0(pm)}</b> pro Monat · ${money0(pm * 12)} im Jahr`;
+  let sub = '', sub2 = '';
+  if (!recs.length && !booked.length) sub = 'Miete, Strom, Kredit – einmal eintragen, die App kümmert sich um den Rest.';
+  else {
+    sub = fm.restSum ? `<span id="fixPaid">schon abgebucht <b class="num">${money(fm.paid)}</b></span> · kommt noch <b class="num">${fm.estimated ? '≈ ' : ''}${money(fm.restSum)}</b>` : (ym === now && !booked.length ? '' : '<span id="fixPaid">alles abgebucht</span>');
+    if (pend.length) sub2 = `<b style="color:var(--danger)">${pend.length > 1 ? pend.length + ' Beträge' : '1 Betrag'} noch einzutragen</b>`;
+    else if (ym === now) sub2 = `Im Schnitt ≈ ${money0(pm)} pro Monat · ${money0(pm * 12)} im Jahr`;
+  }
 
   $('#view').innerHTML = `
     ${monthBar(ym)}
     <section class="hero">
-      <p class="hero-l">Fixkosten im ${monthName(ym)}</p>
-      <p class="hero-n num" id="fixSum">${money(sum)}</p>
-      <p class="hero-s">${sub}</p>
+      <p class="hero-l">Fixkosten im ${monthName(ym)}${fm.restSum ? ' – alle zusammen' : ''}</p>
+      <p class="hero-n num" id="fixSum">${fm.estimated ? '≈ ' : ''}${money(fm.total)}</p>
+      ${sub ? `<p class="hero-s">${sub}</p>` : ''}
+      ${sub2 ? `<p class="hero-s" style="margin-top:6px">${sub2}</p>` : ''}
     </section>
     ${pend.length ? `<div class="sec-h"><h2>Betrag eintragen</h2><span>${pend.length}</span></div>
       <div class="card fx-pend">${pend.map(pendRow).join('')}</div>` : ''}
     <div class="sec-h"><h2>Abgebucht im ${monthName(ym)}</h2><span class="num">${booked.length ? money0(sum) : ''}</span></div>
     <div class="card">${booked.length ? booked.map(bookedRow).join('') : '<div class="empty">In diesem Monat noch nichts abgebucht.</div>'}</div>
-    ${coming.length ? `<div class="sec-h"><h2>Kommt noch im ${monthName(ym)}</h2></div><div class="card">${coming.map(comingRow).join('')}</div>` : ''}
+    ${coming.length ? `<div class="sec-h"><h2>Kommt noch im ${monthName(ym)}</h2><span class="num">${money0(coming.reduce((a, r) => a + (r.vary ? typical(r) : r.amount), 0))}</span></div><div class="card">${coming.map(comingRow).join('')}</div>` : ''}
     <div class="sec-h"><h2>Alle Fixkosten</h2><span>${recs.length || ''}</span></div>
     <div class="card">${recs.length ? recs.slice().sort((a, b) => a.note.localeCompare(b.note, 'de')).map(defRow).join('') : '<div class="empty"><b>Noch keine Fixkosten</b>Tipp unten auf „Fixkosten hinzufügen“.</div>'}
       <button class="more-btn" data-a="addRec">+ Fixkosten hinzufügen</button></div>
@@ -712,6 +732,14 @@ function renderStats() {
 
   $('#view').innerHTML = `
     ${monthBar(ym)}
+    ${(() => { const fm = fixedMonth(ym), all = d.spent + fm.total; return `<div class="sec-h" style="margin-top:8px"><h2>Der Monat im Überblick</h2></div>
+    <div class="card sum-card">
+      <div class="sum-r"><span>Ausgaben <small>ohne Fixkosten</small></span><b class="num" id="sumOut">${money(d.spent)}</b></div>
+      <div class="sum-r"><span>Fixkosten${fm.restSum ? ' <small>inkl. was noch kommt</small>' : ''}</span><b class="num" id="sumFix">${fm.estimated ? '≈ ' : ''}${money(fm.total)}</b></div>
+      <div class="sum-r sum-t"><span>Zusammen</span><b class="num" id="sumAll">${fm.estimated ? '≈ ' : ''}${money(all)}</b></div>
+      ${d.income ? `<div class="sum-r"><span>Einnahmen</span><b class="num" style="color:var(--income)">+${money(d.income)}</b></div>
+      <div class="sum-r sum-t"><span>Bleibt übrig</span><b class="num" style="color:${d.income - all < 0 ? 'var(--danger)' : 'var(--income)'}">${d.income - all >= 0 ? '+' : '−'}${money(Math.abs(d.income - all))}</b></div>` : ''}
+    </div>`; })()}
     <div class="sec-h"><h2>Wohin ging das Geld</h2><span class="num">${money0(d.spent)}</span></div>
     <p class="note" style="padding:0 4px 10px;margin-top:-4px">Nur Ausgaben – Fixkosten haben ihren eigenen Reiter.</p>
     <div class="card">${share || '<div class="empty"><b>Keine Ausgaben</b>In diesem Monat ist noch nichts gebucht.</div>'}</div>

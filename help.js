@@ -63,14 +63,16 @@ const HELP = [
       <li>Bei <b>Erstes Mal am</b> das Datum der nächsten Abbuchung wählen und <b>Speichern</b> drücken.</li>
     </ol>
     <p><b>Gleicher Betrag</b> (z. B. Miete): Die App bucht ihn am Fälligkeitstag automatisch ab.</p>
+    <p><b>Die große Zahl</b> oben zeigt alle Fixkosten des Monats zusammen – auch die, die erst später im Monat abgebucht werden. Darunter steht, wie viel schon abgebucht ist und wie viel noch kommt. Bei schwankenden Beträgen rechnet die App bis zum Eintragen mit dem üblichen Betrag (deshalb das „≈“).</p>
     <p><b>Betrag schwankt:</b> Am Fälligkeitstag erscheint oben eine rote Zahl am Reiter und der Punkt <b>Betrag eintragen</b>. Tipp auf <b>Eintragen</b>, schreib den Betrag vom Kontoauszug hinein und drück <b>Speichern</b>. Der letzte Betrag steht als Hilfe schon grau im Feld. Wurde diesmal nichts abgebucht, drück <b>Diesmal nichts</b>.</p>
     <p><b>Falscher Betrag?</b> Unter „Abgebucht im …“ die Abbuchung antippen und ändern.</p>
     <p><b>Ändern oder beenden:</b> unter „Alle Fixkosten“ den Eintrag antippen. Löschen geht nur mit Bestätigung. Was schon abgebucht ist, bleibt.</p>
     <p class="tip">Mit den Pfeilen neben dem Monat siehst du die Fixkosten früherer Monate.</p>`
   },
   {
-    id: 'stats', t: 'Auswertung', b: `
+    id: 'stats', t: 'Statistik', b: `
     <ul>
+      <li><b>Der Monat im Überblick:</b> Ausgaben ohne Fixkosten, Fixkosten und beides zusammen – jeweils extra zusammengerechnet. Darunter Einnahmen und was übrig bleibt.</li>
       <li><b>Wohin ging das Geld:</b> alle Kategorien des Monats, die teuerste zuerst, mit Anteil in Prozent.</li>
       <li><b>Letzte 12 Monate:</b> eine Säule pro Monat. Die Linie zeigt dein Monatsbudget. Rote Säulen liegen darüber.</li>
       <li>Eine <b>Säule antippen</b> zeigt diesen Monat oben an.</li>

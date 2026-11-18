@@ -374,6 +374,16 @@ button { cursor: pointer; }
 .tgl-big small { display: block; font-size: 15px; color: var(--muted); line-height: 1.4; }
 .amt-s input { font-size: 40px; }
 
+.hero-tag { display: inline-block; font-size: 14px; font-weight: 700; background: var(--soft); border: 1px solid var(--edge); border-radius: 8px; padding: 0 8px; margin-left: 4px; vertical-align: 2px; }
+.sum-card { padding: 4px 18px; }
+.sum-r { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 18px; }
+.sum-r:last-child { border-bottom: 0; }
+.sum-r small { display: block; font-size: 14px; color: var(--muted); }
+.sum-r b { font-size: 20px; white-space: nowrap; }
+.sum-t { border-bottom: 2px solid var(--text); }
+.sum-t span { font-weight: 700; }
+.sum-t b { font-size: 22px; }
+
 /* Hilfe */
 .help { padding: 0 18px; }
 .help details { border-bottom: 1px solid var(--line); }
