@@ -84,7 +84,7 @@ button { cursor: pointer; }
   }
   .nav-add:active { transform: scale(.95); }
   #view { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 110px); }
-  .toast { left: 16px; right: 100px; transform: none; max-width: none; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 24px); }
+  body .toast { left: 16px; right: 100px; transform: none; max-width: none; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 24px); }
 }
 .nav-i {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
@@ -349,6 +349,30 @@ button { cursor: pointer; }
 .fx-pm { font-size: 14px; color: var(--muted); white-space: nowrap; }
 :root[data-fs="xl"] .fx { flex-wrap: wrap; }
 :root[data-fs="xl"] .fx-a { width: 100%; align-items: flex-start; }
+
+/* Fixkosten – eigene Welt */
+.nav-i[data-tab="fixed"] { position: relative; }
+.badge {
+  position: absolute; top: 2px; left: 50%; margin-left: 6px; min-width: 22px; height: 22px; padding: 0 6px;
+  border-radius: 11px; background: var(--danger); color: #FFFFFF; font-size: 13px; font-weight: 700; line-height: 22px; text-align: center;
+}
+:root[data-theme="dark"] .badge { color: #1A0705; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .badge { color: #1A0705; } }
+@media (min-width: 900px) { .badge { position: static; margin-left: auto; } }
+.fx-pend { border: 2px solid var(--danger); }
+.fxp { align-items: center; }
+.fxp-b { flex: none; background: var(--danger); color: #FFFFFF; font-weight: 700; font-size: 16px; border-radius: 12px; padding: 10px 14px; }
+:root[data-theme="dark"] .fxp-b { color: #1A0705; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .fxp-b { color: #1A0705; } }
+.fx-ok { width: 36px; height: 36px; border-radius: 50%; flex: none; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.fx-ok svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.fxc .tx-a { color: var(--muted); font-weight: 400; }
+.fx-name { font-size: 24px; font-weight: 700; margin: 4px 2px 2px; }
+.tgl-big { align-items: flex-start; margin: 0 0 6px; }
+.tgl-big input { margin-top: 3px; }
+.tgl-big b { display: block; font-size: 18px; }
+.tgl-big small { display: block; font-size: 15px; color: var(--muted); line-height: 1.4; }
+.amt-s input { font-size: 40px; }
 
 /* Hilfe */
 .help { padding: 0 18px; }

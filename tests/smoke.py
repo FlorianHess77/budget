@@ -18,13 +18,12 @@ last_month = (today.replace(day=1) - datetime.timedelta(days=1)).isoformat()
 early = today.replace(day=1).isoformat()
 prev_first = (today.replace(day=1) - datetime.timedelta(days=1)).replace(day=1).isoformat()
 
-async def add(pg, amount, cat, note='', date=None, income=False, repeat=False):
+async def add(pg, amount, cat, note='', date=None, income=False):
     await pg.click('.nav-add'); await pg.wait_for_timeout(150)
     if income: await pg.click('.seg [data-t="in"]')
     await pg.fill('#fAmt', amount)
     if note: await pg.fill('#fNote', note)
     if date: await pg.fill('#fDate', date)
-    if repeat: await pg.check('#fRepeat')
     await pg.click(f'.chip:has-text("{cat}")'); await pg.wait_for_timeout(200)
 
 async def run(theme):
@@ -51,10 +50,7 @@ async def run(theme):
         await shot('03-erfassen')
         await pg.click('.sheet-head [data-a="closeSheet"]')
 
-        # Miete monatlich ab Vormonat → dieser Monat wird automatisch gebucht
-        await add(pg, '650', 'Wohnen', 'Miete', prev_first, repeat=True)
-        check(await pg.evaluate("S.tx.filter(t=>t.note==='Miete').length") == 2, f'{theme}: Miete für Vormonat und diesen Monat gebucht')
-        check(await pg.locator('.rec-mark').count() >= 1, f'{theme}: Kennzeichnung „monatlich“')
+        check(await pg.locator('#fRepeat').count() == 0, f'{theme}: kein „Jeden Monat wiederholen“ beim Erfassen')
         await add(pg, '84,30', 'Lebensmittel', 'Billa')
         await add(pg, '1.234,56', 'Freizeit', 'Urlaub Anzahlung', early)
         await add(pg, '170', 'Auto', 'Service')
@@ -64,9 +60,9 @@ async def run(theme):
         check(await pg.locator('h1').inner_text() == ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'][int(last_month[5:7])-1] + ' ' + last_month[:4], f'{theme}: springt in den Monat der Buchung')
         await pg.click('[data-a="month"][data-d="1"]'); await pg.wait_for_timeout(200)
         spent = await pg.inner_text('#spent')
-        check(spent.replace(' ', ' ') == '2.151,85 €', f'{theme}: Monatsausgaben 2.151,85 € (ist {spent})')
+        check(spent.replace(' ', ' ') == '1.501,85 €', f'{theme}: Monatsausgaben 1.501,85 € (ist {spent})')
         check(await pg.locator('.cat.warn').count() == 2, f'{theme}: Auto und Freizeit als Warnung')
-        check('Saldo' in await pg.inner_text('.hero'), f'{theme}: Einnahmen und Saldo angezeigt')
+        check('bleiben' in await pg.inner_text('.hero'), f'{theme}: Einnahmen und Rest angezeigt')
         await shot('04-uebersicht')
 
         # Bearbeiten
@@ -74,7 +70,7 @@ async def run(theme):
         await shot('05-bearbeiten')
         await pg.fill('#fAmt', '90')
         await pg.click('[data-a="saveTx"]'); await pg.wait_for_timeout(200)
-        check((await pg.inner_text('#spent')).replace(' ', ' ') == '2.157,55 €', f'{theme}: Bearbeiten ändert die Summe')
+        check((await pg.inner_text('#spent')).replace(' ', ' ') == '1.507,55 €', f'{theme}: Bearbeiten ändert die Summe')
         # Löschen + Rückgängig
         await pg.click('.tx:has-text("Netflix")'); await pg.wait_for_timeout(150)
         await pg.click('[data-a="delTx"]'); await pg.wait_for_timeout(200)
@@ -125,8 +121,7 @@ async def run(theme):
 
         # Bleibt nach Neuladen erhalten
         await pg.reload(); await pg.wait_for_timeout(400)
-        check(await pg.locator('.tx').count() == 6, f'{theme}: Daten bleiben nach Neuladen')
-        check(await pg.evaluate("S.tx.filter(t=>t.note==='Miete').length") == 2, f'{theme}: keine doppelte Miete nach Neuladen')
+        check(await pg.locator('.tx').count() == 5, f'{theme}: Daten bleiben nach Neuladen')
 
         # Einstellungen
         # Backup-Erinnerung
@@ -138,54 +133,115 @@ async def run(theme):
 
         # Auswertung
         await pg.click('[data-tab="stats"]'); await pg.wait_for_timeout(250)
-        check(await pg.locator('.sh').count() == 5, f'{theme}: 5 Kategorien in „Wohin ging das Geld“')
+        check(await pg.locator('.sh').count() == 4, f'{theme}: 4 Kategorien in „Wohin ging das Geld“')
         check(await pg.locator('.col').count() == 12, f'{theme}: 12 Monatssäulen')
         check(await pg.locator('.col path.over').count() == 1, f'{theme}: aktueller Monat rot (über Budget)')
         await shot('09-auswertung')
         await pg.locator('.col').nth(10).click(); await pg.wait_for_timeout(200)
-        check('Wohnen' in await pg.inner_text('.card') and await pg.locator('.sh').count() == 2, f'{theme}: Tipp auf Säule zeigt Vormonat')
+        check('Lebensmittel' in await pg.inner_text('.card') and await pg.locator('.sh').count() == 1, f'{theme}: Tipp auf Säule zeigt Vormonat')
         await pg.click('[data-a="month"][data-d="1"]'); await pg.wait_for_timeout(150)
 
         # CSV und Backup
         csv = await pg.evaluate("csvText()")
-        check(csv.splitlines()[0].endswith('Datum;Typ;Kategorie;Betrag;Notiz') and len(csv.splitlines()) == 9 and '-1234,56' in csv, f'{theme}: CSV mit 8 Buchungen')
+        check(csv.splitlines()[0].endswith('Datum;Typ;Kategorie;Betrag;Notiz') and len(csv.splitlines()) == 7 and '-1234,56' in csv, f'{theme}: CSV mit 6 Buchungen')
         backup = await pg.evaluate("JSON.stringify({app:'budget',version:1,exported:new Date().toISOString(),cats:S.cats,tx:S.tx,rec:S.rec})")
         bfile = os.path.join(OUT, f'{theme}-backup.json'); open(bfile, 'w').write(backup)
         await pg.evaluate("S.tx = S.tx.slice(0,2); save(); route()")
         pg.once('dialog', lambda d: asyncio.ensure_future(d.accept()))
         await pg.set_input_files('#fileBackup', bfile); await pg.wait_for_timeout(400)
-        check(await pg.evaluate("S.tx.length") == 8, f'{theme}: Backup laden stellt alle Buchungen wieder her')
+        check(await pg.evaluate("S.tx.length") == 6, f'{theme}: Backup laden stellt alle Buchungen wieder her')
         bad = os.path.join(OUT, 'bad.json'); open(bad, 'w').write('{"hallo":1}')
         await pg.set_input_files('#fileBackup', bad); await pg.wait_for_timeout(300)
-        check(await pg.evaluate("S.tx.length") == 8 and 'kein gültiges' in await pg.inner_text('#toast'), f'{theme}: ungültige Datei wird abgelehnt')
+        check(await pg.evaluate("S.tx.length") == 6 and 'kein gültiges' in await pg.inner_text('#toast'), f'{theme}: ungültige Datei wird abgelehnt')
 
         await pg.click('[data-tab="settings"]'); await pg.wait_for_timeout(200)
-        # Fixkosten-Reiter: vierteljährlich, erstes Mal heute → sofort gebucht; jährlich in der Zukunft → noch nicht
+        # ---------- Fixkosten: komplett getrennt von den Ausgaben ----------
         await pg.click('[data-tab="fixed"]'); await pg.wait_for_timeout(200)
-        check(await pg.locator('.fx').count() == 1, f'{theme}: Miete im Reiter Fixkosten')
+        check(await pg.locator('.fx').count() == 0, f'{theme}: noch keine Fixkosten')
+        async def new_fix(name, amount, every_, first, vary=False):
+            await pg.click('[data-a="addRec"]'); await pg.wait_for_timeout(150)
+            await pg.fill('#fNote', name)
+            if vary: await pg.check('#fVary'); await pg.wait_for_timeout(100)
+            if amount: await pg.fill('#fAmt', amount)
+            await pg.select_option('#fEvery', every_); await pg.fill('#fNext', first)
+            await pg.click('[data-a="saveTx"]'); await pg.wait_for_timeout(200)
+        # Fester Betrag, monatlich ab Vormonat → Vormonat und dieser Monat automatisch abgebucht
+        await new_fix('Miete', '650', '1', prev_first)
+        check(await pg.evaluate("S.tx.filter(t=>t.note==='Miete' && t.fixed).length") == 2, f'{theme}: Miete für Vormonat und diesen Monat abgebucht')
+        check((await pg.inner_text('#fixSum')).replace('\u00a0', ' ') == '650,00 €', f'{theme}: Fixkosten im Monat 650 €')
+        # Schwankender Betrag → nichts automatisch, sondern „Betrag eintragen“
         await pg.click('[data-a="addRec"]'); await pg.wait_for_timeout(150)
-        await pg.fill('#fAmt', '45'); await pg.fill('#fNote', 'Versicherung'); await pg.select_option('#fEvery', '3')
-        await pg.fill('#fNext', today.isoformat())
-        await pg.click('.chip:has-text("Auto")')
+        await pg.fill('#fNote', 'Strom'); await pg.check('#fVary'); await pg.wait_for_timeout(100)
+        check(await pg.locator('#fNote').input_value() == 'Strom' and 'leer lassen' in await pg.inner_text('#sheet'), f'{theme}: Haken „Betrag ist jedes Mal anders“')
+        await pg.fill('#fNext', prev_first); await pg.dispatch_event('#fNext', 'change'); await pg.wait_for_timeout(50)
         await shot('10-fixkosten-neu')
-        await pg.click('[data-a="saveTx"]'); await pg.wait_for_timeout(200)
+        await pg.click('[data-a="saveTx"]'); await pg.wait_for_timeout(250)
+        check(await pg.evaluate("S.tx.filter(t=>t.note==='Strom').length") == 0, f'{theme}: schwankender Betrag wird nicht automatisch gebucht')
+        check(await pg.locator('.fxp').count() == 2 and await pg.inner_text('.nav-i[data-tab="fixed"] .badge') == '2', f'{theme}: 2 Beträge offen, Zahl am Reiter')
+        await shot('10a-fixkosten-offen')
+        await pg.locator('.fxp').first.click(); await pg.wait_for_timeout(150)
+        await pg.click('[data-a="saveTx"]'); await pg.wait_for_timeout(100)
+        check(await pg.locator('#fErr').is_visible(), f'{theme}: Hinweis ohne Betrag')
+        await shot('10c-betrag-eintragen')
+        await pg.fill('#fAmt', '54,20'); await pg.click('[data-a="saveTx"]'); await pg.wait_for_timeout(200)
+        check(await pg.evaluate("S.tx.filter(t=>t.note==='Strom' && t.fixed && t.amount===5420).length") == 1 and await pg.locator('.fxp').count() == 1, f'{theme}: Strom eingetragen, 1 noch offen')
+        await pg.locator('.fxp').first.click(); await pg.wait_for_timeout(150)
+        check(await pg.locator('#fAmt').get_attribute('placeholder') == '54,20', f'{theme}: letzter Betrag als Hilfe')
+        await pg.click('[data-a="skipFix"]'); await pg.wait_for_timeout(200)
+        check(await pg.locator('.fxp').count() == 0 and await pg.locator('.nav-i[data-tab="fixed"] .badge').is_hidden(), f'{theme}: „Diesmal nichts“ – nichts mehr offen')
+        await pg.click('#toast button'); await pg.wait_for_timeout(200)
+        check(await pg.locator('.fxp').count() == 1, f'{theme}: Rückgängig macht ihn wieder offen')
+        await pg.locator('.fxp').first.click(); await pg.wait_for_timeout(150)
+        await pg.fill('#fAmt', '61,90'); await pg.press('#fAmt', 'Enter'); await pg.wait_for_timeout(200)
+        check(await pg.locator('.fxp').count() == 0, f'{theme}: zweiter Strombetrag eingetragen')
+        # Vierteljährlich ab heute → sofort gebucht, nächste in 3 Monaten
+        await new_fix('Versicherung', '45', '3', today.isoformat())
         check(await pg.evaluate("S.tx.filter(t=>t.note==='Versicherung').length") == 1, f'{theme}: Versicherung sofort gebucht')
         nxt = await pg.evaluate("nextDue(S.rec.find(r=>r.note==='Versicherung'))")
         check(nxt[:7] == (lambda d: f'{d.year + (d.month + 2) // 12}-{(d.month + 2) % 12 + 1:02d}')(today), f'{theme}: nächste Versicherung in 3 Monaten ({nxt})')
         await pg.evaluate("materialize()")
         check(await pg.evaluate("S.tx.filter(t=>t.note==='Versicherung').length") == 1, f'{theme}: keine doppelte Buchung')
-        await pg.click('[data-a="addRec"]'); await pg.wait_for_timeout(150)
-        future = (today + datetime.timedelta(days=40)).isoformat()
-        await pg.fill('#fAmt', '240'); await pg.fill('#fNote', 'Vignette'); await pg.select_option('#fEvery', '12'); await pg.fill('#fNext', future)
-        await pg.click('.chip:has-text("Auto")'); await pg.click('[data-a="saveTx"]'); await pg.wait_for_timeout(200)
+        # Jährlich in der Zukunft
+        await new_fix('Vignette', '240', '12', (today + datetime.timedelta(days=40)).isoformat())
         check(await pg.evaluate("S.tx.filter(t=>t.note==='Vignette').length") == 0, f'{theme}: jährliche Fixkosten in der Zukunft noch nicht gebucht')
         check('≈ 20 € / Monat' in (await pg.inner_text('#view')).replace('\u00a0', ' '), f'{theme}: jährlich 240 € ≈ 20 € pro Monat')
-        check(await pg.locator('.fx').count() == 3, f'{theme}: 3 Fixkosten in der Liste')
+        check(await pg.locator('.fx').count() == 4, f'{theme}: 4 Fixkosten in der Liste')
+        # Gebuchte Abbuchung ändern
+        await pg.click('.fxb:has-text("Miete")'); await pg.wait_for_timeout(150)
+        await pg.fill('#fAmt', '660'); await pg.click('[data-a="saveTx"]'); await pg.wait_for_timeout(200)
+        fx_sum = (await pg.inner_text('#fixSum')).replace('\u00a0', ' ')
+        check(fx_sum == '766,90 €', f'{theme}: Fixkosten im Monat 660 + 61,90 + 45 = 766,90 € (ist {fx_sum})')
         await shot('10b-fixkosten')
         # Datum ändern bucht nicht doppelt
         await pg.click('.fx:has-text("Versicherung")'); await pg.wait_for_timeout(150)
         await pg.fill('#fNext', today.replace(day=1).isoformat()); await pg.click('[data-a="saveTx"]'); await pg.wait_for_timeout(200)
         check(await pg.evaluate("S.tx.filter(t=>t.note==='Versicherung').length") == 1, f'{theme}: Datum ändern bucht nicht doppelt')
+        # Fixkosten löschen nur mit Bestätigung
+        await pg.click('.fx:has-text("Vignette")'); await pg.wait_for_timeout(150)
+        await pg.click('[data-a="delRec"]'); await pg.wait_for_timeout(150)
+        check(await pg.locator('[data-a="confirmYes"]').is_visible(), f'{theme}: Bestätigung vor dem Löschen von Fixkosten')
+        await pg.click('[data-a="confirmYes"]'); await pg.wait_for_timeout(200)
+        check(await pg.locator('.fx').count() == 3, f'{theme}: Vignette gelöscht')
+        # Vormonat im Fixkosten-Reiter
+        await pg.click('[data-a="month"][data-d="-1"]'); await pg.wait_for_timeout(150)
+        check((await pg.inner_text('#fixSum')).replace('\u00a0', ' ') == '704,20 €', f'{theme}: Vormonat Miete 650 + Strom 54,20')
+        await pg.click('[data-a="month"][data-d="1"]'); await pg.wait_for_timeout(150)
+        # Übersicht bleibt unberührt
+        await pg.reload(); await pg.wait_for_timeout(400)
+        check(await pg.evaluate("S.tx.filter(t=>t.note==='Miete').length") == 2, f'{theme}: keine doppelte Miete nach Neuladen')
+        await pg.click('[data-tab="home"]'); await pg.wait_for_timeout(200)
+        check((await pg.inner_text('#spent')).replace('\u00a0', ' ') == '1.507,55 €', f'{theme}: Fixkosten zählen nicht zu den Ausgaben')
+        check(await pg.locator('.tx:has-text("Miete"), .tx:has-text("Strom")').count() == 0, f'{theme}: keine Fixkosten in den Buchungen der Übersicht')
+        check('Fixkosten' in await pg.inner_text('.hero'), f'{theme}: Rest nach Ausgaben und Fixkosten')
+        await shot('04-uebersicht-getrennt')
+        await pg.click('[data-tab="stats"]'); await pg.wait_for_timeout(200)
+        check(await pg.locator('.sh').count() == 4, f'{theme}: Auswertung ohne Fixkosten')
+        csv = await pg.evaluate("csvText()")
+        check(';Fixkosten;' in csv, f'{theme}: CSV kennzeichnet Fixkosten')
+        # Alte Daten (vor der Trennung) werden umgestellt
+        await pg.evaluate("S.rec.push({id:'old1',type:'out',amount:999,cat:S.cats[0].id,day:1,start:'2020-01',last:'2020-01',every:1}); S.tx.push({id:'oldt',type:'out',amount:999,cat:S.cats[0].id,date:'2020-01-01',note:'',recId:'old1'}); migrate()")
+        check(await pg.evaluate("S.tx.find(t=>t.id==='oldt').fixed === true && S.rec.find(r=>r.id==='old1').note === S.cats[0].name"), f'{theme}: alte Daten werden umgestellt')
+        await pg.evaluate("S.rec = S.rec.filter(r=>r.id!=='old1'); S.tx = S.tx.filter(t=>t.id!=='oldt'); save()")
         await pg.click('[data-tab="settings"]'); await pg.wait_for_timeout(200)
         await pg.fill('.add-cat[data-newcat="out"] input', 'Kleidung'); await pg.click('.add-cat[data-newcat="out"] button'); await pg.wait_for_timeout(200)
         await pg.fill('.set-row:has(input[value="Kleidung"]) [data-bud]', '80'); await pg.wait_for_timeout(100)
@@ -232,6 +288,8 @@ async def run(theme):
         await pg.screenshot(path=f'{OUT}/{theme}-07-mac.png')
         await pg.click('.nav-add'); await pg.wait_for_timeout(200)
         await pg.screenshot(path=f'{OUT}/{theme}-08-mac-erfassen.png')
+        await pg.click('.sheet-head [data-a="closeSheet"]'); await pg.click('[data-tab="fixed"]'); await pg.wait_for_timeout(200)
+        await pg.screenshot(path=f'{OUT}/{theme}-12-mac-fixkosten.png')
         await b.close()
 
 asyncio.run(run('light'))

@@ -29,7 +29,7 @@ const HELP = [
       <li>Oben auf <b>Einnahme</b> umschalten.</li>
       <li>Betrag eintippen und z. B. <b>Gehalt</b> antippen.</li>
     </ol>
-    <p>Einnahmen erscheinen auf der Übersicht unter der großen Zahl, zusammen mit dem <b>Saldo</b> (Einnahmen minus Ausgaben).</p>`
+    <p>Einnahmen erscheinen auf der Übersicht unter der großen Zahl. Darunter steht, wie viel nach Ausgaben und Fixkosten übrig bleibt.</p>`
   },
   {
     id: 'edit', t: 'Buchung ändern oder löschen', b: `
@@ -43,7 +43,7 @@ const HELP = [
   {
     id: 'overview', t: 'Die Übersicht verstehen', b: `
     <ul>
-      <li><b>Große Zahl:</b> so viel hast du in diesem Monat ausgegeben.</li>
+      <li><b>Große Zahl:</b> so viel hast du in diesem Monat ausgegeben – <b>ohne Fixkosten</b>. Die stehen im eigenen Reiter.</li>
       <li><b>Darunter:</b> wie viel vom Budget noch übrig ist.</li>
       <li><b>Kategorien:</b> rechts steht, wie viel du schon ausgegeben hast, darunter, wie viel noch übrig ist.</li>
       <li><b>Rot</b> bedeutet: mehr als 80 % verbraucht oder schon darüber. Ist ein Budget genau aufgebraucht (z. B. die Miete), bleibt es grün.</li>
@@ -52,18 +52,21 @@ const HELP = [
     </ul>`
   },
   {
-    id: 'rec', t: 'Fixkosten (Miete, Versicherung, Abos …)', b: `
-    <p>Fixkosten trägst du nur einmal ein. Die App bucht sie dann automatisch, sobald sie fällig sind – auch wenn sie nur alle paar Monate anfallen.</p>
+    id: 'rec', t: 'Fixkosten (Miete, Strom, Versicherung …)', b: `
+    <p>Fixkosten haben ihren <b>eigenen Reiter</b> und eine eigene Summe. Sie zählen <b>nicht</b> zu den Ausgaben in der Übersicht und nicht zu den Budgets der Kategorien.</p>
+    <p><b>Neue Fixkosten anlegen:</b></p>
     <ol>
-      <li>Reiter <b>Fixkosten</b> öffnen → <b>Fixkosten hinzufügen</b>.</li>
-      <li>Betrag und Notiz eintragen, z. B. „Haushaltsversicherung“.</li>
+      <li>Reiter <b>Fixkosten</b> öffnen → <b>+ Fixkosten hinzufügen</b>.</li>
+      <li>Bei <b>Wofür?</b> den Namen schreiben, z. B. „Strom“.</li>
+      <li>Ist der Betrag jedes Mal anders (Strom, Telefon …), den Haken <b>Betrag ist jedes Mal anders</b> setzen. Sonst den Betrag eintragen.</li>
       <li>Bei <b>Wie oft</b> wählen: monatlich, alle 2 Monate, vierteljährlich, halbjährlich oder jährlich.</li>
-      <li>Bei <b>Erstes Mal am</b> das Datum der nächsten Zahlung wählen.</li>
-      <li>Kategorie antippen und <b>Speichern</b> drücken.</li>
+      <li>Bei <b>Erstes Mal am</b> das Datum der nächsten Abbuchung wählen und <b>Speichern</b> drücken.</li>
     </ol>
-    <p>Oben im Reiter siehst du, was deine Fixkosten <b>pro Monat</b> und <b>pro Jahr</b> ausmachen. Bei jährlichen Beträgen steht dabei, wie viel du dafür jeden Monat zur Seite legen solltest.</p>
-    <p><b>Ändern oder beenden:</b> im Reiter Fixkosten den Eintrag antippen. Änderungen gelten ab dem nächsten Mal. Was schon gebucht ist, bleibt.</p>
-    <p class="tip">Schneller für monatliche Beträge: beim normalen Erfassen den Haken <b>Jeden Monat wiederholen</b> setzen.</p>`
+    <p><b>Gleicher Betrag</b> (z. B. Miete): Die App bucht ihn am Fälligkeitstag automatisch ab.</p>
+    <p><b>Betrag schwankt:</b> Am Fälligkeitstag erscheint oben eine rote Zahl am Reiter und der Punkt <b>Betrag eintragen</b>. Tipp auf <b>Eintragen</b>, schreib den Betrag vom Kontoauszug hinein und drück <b>Speichern</b>. Der letzte Betrag steht als Hilfe schon grau im Feld. Wurde diesmal nichts abgebucht, drück <b>Diesmal nichts</b>.</p>
+    <p><b>Falscher Betrag?</b> Unter „Abgebucht im …“ die Abbuchung antippen und ändern.</p>
+    <p><b>Ändern oder beenden:</b> unter „Alle Fixkosten“ den Eintrag antippen. Löschen geht nur mit Bestätigung. Was schon abgebucht ist, bleibt.</p>
+    <p class="tip">Mit den Pfeilen neben dem Monat siehst du die Fixkosten früherer Monate.</p>`
   },
   {
     id: 'stats', t: 'Auswertung', b: `

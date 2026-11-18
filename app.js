@@ -1,7 +1,7 @@
 'use strict';
 // Budget – Ausgaben erfassen, Monat im Blick. Reines JS, Daten lokal in IndexedDB.
 // Bei Änderungen APP_VER hochzählen, damit iPhone und Mac das Update bekommen.
-const APP_VER = '1.6.0';
+const APP_VER = '1.7.0';
 
 /* ---------- Hilfen ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -83,6 +83,16 @@ async function load() {
     if (d) Object.assign(S, d);
   } catch (e) { console.warn('Laden fehlgeschlagen', e); }
   if (!S.cats.length) S.cats = defaultCats();
+  migrate();
+}
+// Ältere Daten: Fixkosten-Buchungen markieren, damit sie von den normalen Ausgaben getrennt sind
+function migrate() {
+  for (const r of S.rec) {
+    if (!r.type) r.type = 'out';
+    if (!r.note) r.note = catById(r.cat)?.name || 'Fixkosten';
+    if (!Array.isArray(r.skip)) r.skip = [];
+  }
+  for (const t of S.tx) if (t.recId && !t.fixed) { const r = recById(t.recId); if (r && r.type === 'out') t.fixed = true; }
 }
 let saveP = Promise.resolve();
 function save() {
@@ -93,39 +103,83 @@ function save() {
 const catById = id => S.cats.find(c => c.id === id);
 const recById = id => S.rec.find(r => r.id === id);
 
-/* ---------- Fixkosten (wiederkehrende Buchungen) ---------- */
-// r.every = Abstand in Monaten (1, 2, 3, 6, 12), r.day = Tag, r.start = erster fälliger Monat,
-// r.last = zuletzt gebuchter Monat. Legt alle fälligen Buchungen bis heute an.
+/* ---------- Fixkosten ---------- */
+// Fixkosten sind komplett getrennt von den normalen Ausgaben (eigener Reiter, eigene Summe).
+// r.note = Name, r.every = Abstand in Monaten (1, 2, 3, 6, 12), r.day = Tag, r.start = erster fälliger Monat,
+// r.vary = Betrag schwankt (wird nicht automatisch gebucht, sondern beim Abbuchen eingetragen),
+// r.last = zuletzt automatisch gebuchter Monat, r.skip = Monate ohne Abbuchung.
+// Buchungen von Fixkosten tragen t.fixed = true und t.dueM = Monat, für den sie gelten.
 const EVERY = { 1: 'monatlich', 2: 'alle 2 Monate', 3: 'vierteljährlich', 6: 'halbjährlich', 12: 'jährlich' };
 const every = r => r.every || 1;
+const isFixedRec = r => r.type !== 'in';
+const dueDate = (r, m) => `${m}-${pad(Math.min(r.day, daysIn(m)))}`;
 const nextMonth = r => r.last ? shiftMonth(r.last, every(r)) : r.start;
-const nextDue = r => { const m = nextMonth(r); return `${m}-${pad(Math.min(r.day, daysIn(m)))}`; };
-const perMonth = r => r.amount / every(r);
+const bookedIn = (r, m) => S.tx.some(t => t.recId === r.id && (t.dueM || monthOf(t.date)) === m);
+const handled = (r, m) => bookedIn(r, m) || (r.skip || []).includes(m);
+function nextDue(r) {
+  if (!r.vary) return dueDate(r, nextMonth(r));
+  let m = r.start, g = 0;
+  while (handled(r, m) && g++ < 400) m = shiftMonth(m, every(r));
+  return dueDate(r, m);
+}
+// Üblicher Betrag: bei schwankenden der Schnitt der letzten 3 Abbuchungen
+function typical(r) {
+  if (!r.vary) return r.amount;
+  const xs = S.tx.filter(t => t.recId === r.id).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3).map(t => t.amount);
+  return xs.length ? Math.round(xs.reduce((a, v) => a + v, 0) / xs.length) : (r.amount || 0);
+}
+const lastAmount = r => S.tx.filter(t => t.recId === r.id).sort((a, b) => b.date.localeCompare(a.date))[0]?.amount || r.amount || 0;
+const perMonth = r => typical(r) / every(r);
 const longDate = iso => { const d = new Date(iso + 'T12:00:00'); return `${d.getDate()}. ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
+const fixedIn = ym => S.tx.filter(t => t.fixed && (t.dueM || monthOf(t.date)) === ym);
+// Schwankende Fixkosten, die fällig sind, aber noch keinen Betrag haben (bis 12 Monate zurück)
+function pendingList() {
+  const today = todayISO(), from = shiftMonth(monthOf(today), -12), res = [];
+  for (const r of S.rec) {
+    if (!r.vary || !isFixedRec(r)) continue;
+    let m = r.start, g = 0;
+    while (m <= monthOf(today) && g++ < 400) {
+      const d = dueDate(r, m);
+      if (d <= today && m >= from && !handled(r, m)) res.push({ r, m, date: d });
+      m = shiftMonth(m, every(r));
+    }
+  }
+  return res.sort((a, b) => a.date.localeCompare(b.date));
+}
+// Fixe Beträge automatisch buchen, sobald sie fällig sind
 function materialize() {
   const now = todayISO(), curM = monthOf(now), today = +now.slice(8);
   let added = 0;
   for (const r of S.rec) {
+    if (r.vary) continue;
     let m = nextMonth(r);
     while (m <= curM) {
       const d = Math.min(r.day, daysIn(m));
       if (m === curM && d > today) break;
-      // nie doppelt im selben Monat buchen (z. B. nach Änderung des Datums)
-      if (!S.tx.some(t => t.recId === r.id && monthOf(t.date) === m)) {
-        S.tx.push({ id: uid(), type: r.type, amount: r.amount, cat: r.cat, date: `${m}-${pad(d)}`, note: r.note, recId: r.id, created: Date.now() });
+      if (!bookedIn(r, m)) {
+        const fixed = isFixedRec(r);
+        S.tx.push({ id: uid(), type: r.type, amount: r.amount, cat: fixed ? 'fix' : r.cat, date: `${m}-${pad(d)}`, note: r.note, recId: r.id, created: Date.now(), ...(fixed ? { fixed: true, dueM: m } : {}) });
         added++;
       }
       r.last = m; m = shiftMonth(m, every(r));
     }
   }
   if (added) save();
+  updateBadge();
   return added;
+}
+function updateBadge() {
+  const b = document.querySelector('.nav-i[data-tab="fixed"] .badge'); if (!b) return;
+  const n = S.setup ? pendingList().length : 0;
+  b.textContent = n; b.hidden = !n;
+  b.closest('a').setAttribute('aria-label', n ? `Fixkosten, ${n > 1 ? n + ' Beträge' : '1 Betrag'} einzutragen` : 'Fixkosten');
 }
 const activeCats = kind => S.cats.filter(c => c.kind === kind && !c.archived);
 
 /* ---------- Router ---------- */
 function route() {
   const h = location.hash || '#/';
+  updateBadge();
   if (!S.setup) return renderWelcome();
   if (h.startsWith('#/settings')) return renderSettings();
   if (h.startsWith('#/stats')) return renderStats();
@@ -157,7 +211,7 @@ function renderWelcome() {
 
 /* ---------- Übersicht ---------- */
 function monthData(ym) {
-  const tx = S.tx.filter(t => monthOf(t.date) === ym);
+  const tx = S.tx.filter(t => monthOf(t.date) === ym && !t.fixed);
   const out = tx.filter(t => t.type === 'out'), inc = tx.filter(t => t.type === 'in');
   const byCat = {};
   out.forEach(t => byCat[t.cat] = (byCat[t.cat] || 0) + t.amount);
@@ -207,7 +261,8 @@ function renderHome() {
       <p class="hero-n num" id="spent">${money(d.spent)}</p>
       <p class="hero-s">${sub}</p>
       ${budget ? `<div class="hero-bar${pct >= 0.8 ? ' warn' : ''}"><div style="width:${Math.min(100, pct * 100).toFixed(1)}%"></div></div>` : ''}
-      ${d.income ? `<p class="hero-in">Einnahmen <b class="num">${money0(d.income)}</b> · Saldo <b class="num" style="color:${d.income - d.spent < 0 ? 'var(--danger)' : 'var(--income)'}">${d.income - d.spent >= 0 ? '+' : '−'}${money0(Math.abs(d.income - d.spent))}</b></p>` : ''}
+      ${d.income ? (() => { const fx = fixedIn(ym).reduce((a, t) => a + t.amount, 0), bal = d.income - d.spent - fx; return `<p class="hero-in">Einnahmen <b class="num">${money0(d.income)}</b></p>
+        <p class="hero-in" style="margin-top:2px">Nach Ausgaben${fx ? ' und Fixkosten' : ''} bleiben <b class="num" style="color:${bal < 0 ? 'var(--danger)' : 'var(--income)'}">${bal >= 0 ? '+' : '−'}${money0(Math.abs(bal))}</b></p>`; })() : ''}
     </section>
     ${backupNag()}
     <div class="sec-h"><h2>Kategorien</h2><span>${budget ? Math.round(pct * 100) + ' % vom Budget' : ''}</span></div>
@@ -256,8 +311,13 @@ function openAdd(edit, cat) {
   openSheet(t, edit ? 'Buchung bearbeiten' : 'Neue Buchung', !!edit);
 }
 function openRec(edit) {
-  const t = edit ? { ...edit, mode: 'rec', every: every(edit), next: nextDue(edit) } : { mode: 'rec', type: 'out', amount: 0, cat: null, every: 1, next: todayISO(), note: '' };
+  const t = edit ? { ...edit, mode: 'rec', every: every(edit), next: nextDue(edit), vary: !!edit.vary } : { mode: 'rec', type: 'out', amount: 0, every: 1, next: todayISO(), note: '', vary: false };
   openSheet(t, edit ? 'Fixkosten bearbeiten' : 'Neue Fixkosten', !!edit);
+}
+// Abbuchung eintragen (offener Betrag) oder eine gebuchte Fixkosten-Abbuchung ändern
+function openFixTx(tx, pend) {
+  const t = tx ? { ...tx, mode: 'fixtx' } : { mode: 'fixtx', type: 'out', recId: pend.r.id, note: pend.r.note, amount: 0, date: pend.date, dueM: pend.m, pending: true };
+  openSheet(t, tx ? 'Abbuchung ändern' : 'Betrag eintragen', !!tx);
 }
 function openSheet(t, title, select) {
   UI.sheet = t;
@@ -266,12 +326,47 @@ function openSheet(t, title, select) {
   $('#toast').hidden = true;
   $('#sheet').hidden = false;
   document.body.style.overflow = 'hidden';
-  const a = $('#fAmt');
+  const a = $(t.mode === 'rec' && !t.id ? '#fNote' : '#fAmt');
   a.focus({ preventScroll: true });
-  if (select) a.select();
+  if (select && a.id === 'fAmt') a.select();
+}
+const NOAF = 'autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other"';
+function drawFix(keepInputs) {
+  const t = UI.sheet, edit = !!t.id;
+  const v = id => keepInputs ? $(id)?.value : undefined;
+  const amtVal = v('#fAmt') ?? centsToInput(t.amount);
+  if (t.mode === 'rec') {
+    const next = v('#fNext') ?? t.next, ev = +(v('#fEvery') ?? t.every);
+    $('#sheet .sheet-body').innerHTML = `
+      <label class="note-f"><span>Wofür?</span><input id="fNote" placeholder="z. B. Miete, Strom, Telefon" value="${esc(v('#fNote') ?? t.note)}" maxlength="60" enterkeyhint="next" autocapitalize="sentences" autocorrect="off" spellcheck="false" ${NOAF}></label>
+      <label class="tgl tgl-big"><input type="checkbox" id="fVary" ${t.vary ? 'checked' : ''}><span><b>Betrag ist jedes Mal anders</b><small>z. B. Strom oder Telefon – die App fragt dich dann jedes Mal nach dem Betrag</small></span></label>
+      <p class="pick-h" style="margin-top:6px">${t.vary ? 'Ungefährer Betrag (kannst du leer lassen)' : 'Betrag'}</p>
+      <label class="amt amt-s"><input id="fAmt" class="num" inputmode="decimal" ${NOAF} placeholder="0,00" aria-label="Betrag in Euro" value="${esc(amtVal)}"><span>€</span></label>
+      <div class="err" id="fErr" hidden></div>
+      <div class="row2">
+        <label class="fld"><span>Wie oft</span><select id="fEvery">${Object.entries(EVERY).map(([k, l]) => `<option value="${k}"${+k === ev ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="fld"><span>${edit ? 'Nächstes Mal am' : 'Erstes Mal am'}</span><input id="fNext" type="date" value="${next}"></label>
+      </div>
+      <p class="note" style="padding:0 2px 6px;margin-top:-8px" id="fNextHint">${nextHint(next, t.vary)}</p>
+      <div class="sheet-foot">${edit ? '<button class="btn danger" data-a="delRec">Löschen</button>' : ''}<button class="btn primary wide" data-a="saveTx">Speichern</button></div>
+      ${edit ? '<p class="note" style="padding:12px 2px 0">Änderungen gelten ab dem nächsten Mal. Was schon abgebucht ist, bleibt, wie es ist.</p>' : ''}`;
+    return;
+  }
+  // Abbuchung
+  const r = recById(t.recId), last = r ? lastAmount(r) : 0;
+  $('#sheet .sheet-body').innerHTML = `
+    <p class="fx-name">${esc(t.note)}</p>
+    <p class="note" style="padding:0 2px 10px">${t.pending ? `Fällig am ${longDate(t.date)}` : `Für ${monthLabel(t.dueM || monthOf(t.date))}`}${r?.vary && last && t.pending ? ` · zuletzt ${money(last)}` : ''}</p>
+    <label class="amt"><input id="fAmt" class="num" inputmode="decimal" ${NOAF} placeholder="${last && t.pending ? centsToInput(last) : '0,00'}" aria-label="Abgebuchter Betrag in Euro" value="${esc(amtVal)}"><span>€</span></label>
+    <div class="err" id="fErr" hidden></div>
+    <div class="row1"><label class="fld"><span>Abgebucht am</span><input id="fDate" type="date" value="${v('#fDate') ?? t.date}" max="${todayISO()}"></label></div>
+    <div class="sheet-foot">${edit ? '<button class="btn danger" data-a="delTx">Löschen</button>' : '<button class="btn" data-a="skipFix">Diesmal nichts</button>'}<button class="btn primary wide" data-a="saveTx">Speichern</button></div>
+    ${t.pending ? '<p class="note" style="padding:12px 2px 0">Schau auf dem Kontoauszug, wie viel abgebucht wurde. „Diesmal nichts“ wählst du, wenn in diesem Monat nichts abgebucht wurde.</p>' : ''}`;
 }
 function drawAdd(keepInputs) {
-  const t = UI.sheet, edit = !!t.id, rec = t.mode === 'rec';
+  const t = UI.sheet;
+  if (t.mode !== 'tx') return drawFix(keepInputs);
+  const edit = !!t.id, rec = false;
   const prev = keepInputs ? { amt: $('#fAmt').value, date: $('#fDate')?.value, every: $('#fEvery')?.value, next: $('#fNext')?.value, note: $('#fNote').value } : null;
   const cats = activeCats(t.type);
   const curM = monthOf(todayISO());
@@ -293,8 +388,7 @@ function drawAdd(keepInputs) {
         </div>
         <p class="note" style="padding:0 2px 14px;margin-top:-8px" id="fNextHint">${nextHint(prev?.next || t.next)}</p>`
       : `<div class="row1"><label class="fld"><span>Datum</span><input id="fDate" type="date" value="${prev ? prev.date : t.date}" max="${todayISO()}"></label></div>`}
-    ${instant ? `<label class="tgl"><input type="checkbox" id="fRepeat" ${t.repeat ? 'checked' : ''}><span>Jeden Monat wiederholen</span></label>` : ''}
-    ${parent ? `<p class="note" style="padding:0 2px 12px">Gehört zu den Fixkosten „${esc(parent.note || catById(parent.cat)?.name)}“ (${EVERY[every(parent)]}). Änderungen gelten nur für diese Buchung.</p>` : ''}
+    ${parent ? `<p class="note" style="padding:0 2px 12px">Wiederholt sich: „${esc(parent.note || catById(parent.cat)?.name)}“ (${EVERY[every(parent)]}). Änderungen gelten nur für diese Buchung.</p>` : ''}
     <p class="pick-h">${instant && !t.preset ? 'Kategorie antippen – wird sofort gespeichert' : 'Kategorie'}</p>
     <div class="chips">
       ${cats.map(c => `<button class="chip${t.cat === c.id ? ' on' : ''}" data-a="pick" data-id="${c.id}"><span class="dot" style="background:${c.color}"></span>${esc(c.name)}</button>`).join('')}
@@ -309,7 +403,7 @@ const fold = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '
 function topNotes(cat, type, n = 6, q = '') {
   const m = new Map(), fq = fold(q.trim());
   for (const t of S.tx) {
-    if (t.type !== type || !t.note || (cat && t.cat !== cat)) continue;
+    if (t.fixed || t.type !== type || !t.note || (cat && t.cat !== cat)) continue;
     const k = t.note.trim().toLowerCase();
     const e = m.get(k) || { note: t.note.trim(), n: 0, last: '', cats: {} };
     e.n++; e.cats[t.cat] = (e.cats[t.cat] || 0) + 1;
@@ -347,8 +441,9 @@ function suggHtml(text) {
   return `<span class="sugg-l">${label}:</span>` +
     list.map(x => `<button type="button" role="option" data-a="sugg" data-note="${esc(x.note)}" data-cat="${x.cat}">${markMatch(x.note, q)}</button>`).join('');
 }
-function nextHint(iso) {
+function nextHint(iso, vary) {
   if (!iso) return '';
+  if (vary) return iso <= todayISO() ? 'Schon fällig – nach dem Speichern trägst du den Betrag ein.' : `Am ${longDate(iso)} fragt dich die App nach dem Betrag.`;
   return iso <= todayISO() ? 'Liegt heute oder in der Vergangenheit – wird beim Speichern gleich gebucht.' : `Wird am ${longDate(iso)} automatisch gebucht.`;
 }
 function readSheet() {
@@ -356,45 +451,62 @@ function readSheet() {
   const amount = parseMoney($('#fAmt').value);
   const err = $('#fErr');
   const fail = m => { err.textContent = m; err.hidden = false; return null; };
+  if (t.mode === 'rec') {
+    const note = $('#fNote').value.trim(), vary = $('#fVary').checked, raw = $('#fAmt').value.trim();
+    if (!note) { $('#fNote').focus(); return fail('Schreib dazu, wofür – z. B. Strom'); }
+    if (!vary && !(amount > 0)) { $('#fAmt').focus(); return fail('Gib den Betrag ein'); }
+    if (raw && !(amount > 0)) return fail('Der Betrag stimmt nicht');
+    if (amount > 100000000) return fail('Der Betrag ist zu groß');
+    const next = $('#fNext').value;
+    if (!/^\d{4}-\d\d-\d\d$/.test(next)) return fail('Wähl ein Datum');
+    return { ...t, note, vary, amount: amount > 0 ? amount : 0, every: +$('#fEvery').value, next };
+  }
+  if (t.mode === 'fixtx') {
+    if (!(amount > 0)) { $('#fAmt').focus(); return fail('Gib den abgebuchten Betrag ein'); }
+    if (amount > 100000000) return fail('Der Betrag ist zu groß');
+    return { ...t, amount, date: $('#fDate').value || t.date };
+  }
   if (!(amount > 0)) { $('#fAmt').focus(); return fail('Gib zuerst einen Betrag ein'); }
   if (amount > 100000000) return fail('Der Betrag ist zu groß');
   if (!t.cat || !catById(t.cat)) return fail('Wähl eine Kategorie');
   const base = { ...t, amount, note: $('#fNote').value.trim() };
-  if (t.mode === 'rec') {
-    base.every = +$('#fEvery').value; base.next = $('#fNext').value;
-    if (!/^\d{4}-\d\d-\d\d$/.test(base.next)) return fail('Wähl ein Datum für die erste Buchung');
-  }
-  else { base.date = $('#fDate').value || todayISO(); base.repeat = $('#fRepeat') ? $('#fRepeat').checked : false; }
+  base.date = $('#fDate').value || todayISO();
   return base;
 }
 async function commitTx() {
   const t = readSheet(); if (!t) return;
   const isNew = !t.id;
-  const { mode, repeat, now, preset, ...data } = t;
+  const { mode, repeat, now, preset, pending, ...data } = t;
   let msg;
   if (mode === 'rec') {
-    const base = { type: data.type, amount: data.amount, cat: data.cat, note: data.note, every: data.every };
+    const base = { amount: data.amount, note: data.note, every: data.every, vary: data.vary };
     const day = +data.next.slice(8), start = monthOf(data.next);
     let r;
-    if (isNew) { r = { id: uid(), ...base, day, start, last: null }; S.rec.push(r); }
+    if (isNew) { r = { id: uid(), type: 'out', ...base, day, start, last: null, skip: [] }; S.rec.push(r); }
     else {
-      r = recById(data.id); Object.assign(r, base);
-      // Nur wenn das nächste Datum geändert wurde, neu ausrichten
-      if (data.next !== nextDue(r)) { r.day = day; r.start = start; r.last = null; }
+      r = recById(data.id);
+      const oldNext = nextDue(r);
+      Object.assign(r, base);
+      // Nur wenn das nächste Datum geändert wurde, neu ausrichten (ohne doppelt zu buchen)
+      if (data.next !== oldNext) { r.day = day; r.start = start; r.last = null; }
     }
     const n = materialize();
-    msg = isNew ? `Fixkosten gespeichert${n ? ' – erste Buchung angelegt' : ''}` : 'Fixkosten geändert';
-    await save(); closeSheet(); renderFixed(); toast(msg); return;
+    const open = r.vary && pendingList().some(p => p.r === r);
+    msg = isNew ? (n ? 'Fixkosten gespeichert – erste Abbuchung eingetragen' : open ? 'Gespeichert – trag jetzt den Betrag ein' : 'Fixkosten gespeichert') : 'Fixkosten geändert';
+    await save(); closeSheet(); UI.cur = monthOf(todayISO()); renderFixed(); toast(msg); return;
+  }
+  if (mode === 'fixtx') {
+    const r = recById(data.recId);
+    if (isNew) S.tx.push({ id: uid(), type: 'out', fixed: true, cat: 'fix', recId: data.recId, dueM: data.dueM, note: data.note, amount: data.amount, date: data.date, created: Date.now() });
+    else Object.assign(S.tx.find(x => x.id === data.id), { amount: data.amount, date: data.date });
+    if (r && r.vary) r.amount = data.amount;
+    await save(); closeSheet(); renderFixed(); updateBadge();
+    toast(isNew ? `${data.note}: ${money(data.amount)} eingetragen` : 'Änderung gespeichert'); return;
   }
   if (isNew) {
     data.id = uid(); data.created = Date.now();
-    if (repeat) {
-      const r = { id: uid(), type: data.type, amount: data.amount, cat: data.cat, every: 1, day: +data.date.slice(8), note: data.note, start: monthOf(data.date), last: monthOf(data.date) };
-      S.rec.push(r); data.recId = r.id;
-    }
     S.tx.push(data);
-    if (repeat) materialize();
-    msg = `${money(data.amount)} · ${catById(data.cat)?.name} gespeichert${repeat ? ' – ab jetzt monatlich (siehe Fixkosten)' : ''}`;
+    msg = `${money(data.amount)} · ${catById(data.cat)?.name} gespeichert`;
   } else {
     S.tx[S.tx.findIndex(x => x.id === data.id)] = data;
     msg = 'Änderung gespeichert';
@@ -479,7 +591,7 @@ function renderSettings() {
 function openHistory(id) {
   const c = catById(id); if (!c) return;
   UI.sheet = null; UI.hist = id;
-  const all = S.tx.filter(t => t.cat === id).sort((a, x) => x.date.localeCompare(a.date) || (x.created || 0) - (a.created || 0));
+  const all = S.tx.filter(t => t.cat === id && !t.fixed).sort((a, x) => x.date.localeCompare(a.date) || (x.created || 0) - (a.created || 0));
   const shown = UI.histAll ? all : all.slice(0, 30);
   const monthSum = m => all.filter(t => monthOf(t.date) === m).reduce((a, t) => a + t.amount, 0);
   let lastM = '', list = '';
@@ -498,37 +610,64 @@ function openHistory(id) {
   $('#sheet .sheet-card').scrollTop = 0;
 }
 
-/* ---------- Fixkosten ---------- */
+/* ---------- Fixkosten-Reiter ---------- */
 function renderFixed() {
   $('#nav').hidden = false; setTab('fixed');
-  const out = S.rec.filter(r => r.type === 'out'), inc = S.rec.filter(r => r.type === 'in');
-  const pm = out.reduce((a, r) => a + perMonth(r), 0);
-  const budget = activeCats('out').reduce((a, c) => a + (c.budget || 0), 0);
-  const row = r => {
-    const c = catById(r.cat) || { name: '?', color: '#888' }, n = nextDue(r), e = every(r);
+  const ym = UI.cur, now = monthOf(todayISO()), today = todayISO();
+  const recs = S.rec.filter(isFixedRec);
+  const booked = fixedIn(ym).sort((a, b) => a.date.localeCompare(b.date));
+  const sum = booked.reduce((a, t) => a + t.amount, 0);
+  const pend = pendingList();
+  const coming = ym === now ? recs.filter(r => { const n = nextDue(r); return monthOf(n) === ym && n > today; }).sort((a, b) => nextDue(a).localeCompare(nextDue(b))) : [];
+  const pm = recs.reduce((a, r) => a + perMonth(r), 0);
+
+  const pendRow = p => `<button class="tx fxp" data-a="payFix" data-id="${p.r.id}" data-m="${p.m}">
+      <span class="tx-m"><div class="tx-t">${esc(p.r.note)}</div><div class="fx-d">fällig am ${longDate(p.date)}${lastAmount(p.r) ? ` · zuletzt ${money(lastAmount(p.r))}` : ''}</div></span>
+      <span class="fxp-b">Eintragen</span>
+    </button>`;
+  const bookedRow = t => `<button class="tx fxb" data-a="editFixTx" data-id="${t.id}">
+      <span class="fx-ok" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+      <span class="tx-m"><div class="tx-t">${esc(t.note)}</div><div class="fx-d">abgebucht ${(l => /^(Heute|Gestern)$/.test(l) ? l.toLowerCase() : 'am ' + l)(dayLabel(t.date))}</div></span>
+      <span class="tx-a num">${money(t.amount)}</span>
+    </button>`;
+  const comingRow = r => `<button class="tx fxc" data-a="editRec" data-id="${r.id}">
+      <span class="tx-m"><div class="tx-t">${esc(r.note)}</div><div class="fx-d">am ${longDate(nextDue(r))}</div></span>
+      <span class="tx-a num">${r.vary ? (lastAmount(r) ? '≈ ' + money0(lastAmount(r)) : 'schwankt') : money(r.amount)}</span>
+    </button>`;
+  const defRow = r => {
+    const e = every(r), amt = r.vary ? (lastAmount(r) ? `≈ ${money(typical(r))}` : 'schwankt') : money(r.amount);
     return `<button class="tx fx" data-a="editRec" data-id="${r.id}">
-      <span class="tx-ic" style="background:${c.color};color:${inkOn(c.color)}">${esc(c.name[0] || '?')}</span>
       <span class="tx-m">
-        <div class="tx-t">${esc(r.note || c.name)}</div>
-        <div class="fx-d"><b>${EVERY[e]}</b> · ${esc(c.name)}</div>
-        <div class="fx-d">nächste am ${longDate(n)}</div>
+        <div class="tx-t">${esc(r.note)}</div>
+        <div class="fx-d"><b>${EVERY[e]}</b>${r.vary ? ' · Betrag schwankt' : ''}</div>
+        <div class="fx-d">nächste am ${longDate(nextDue(r))}</div>
       </span>
-      <span class="fx-a"><span class="tx-a num${r.type === 'in' ? ' in' : ''}">${r.type === 'in' ? '+' : '−'}${money(r.amount)}</span>${e > 1 ? `<span class="fx-pm num">≈ ${money0(perMonth(r))} / Monat</span>` : ''}</span>
+      <span class="fx-a"><span class="tx-a num">${amt}</span>${e > 1 ? `<span class="fx-pm num">≈ ${money0(perMonth(r))} / Monat</span>` : ''}</span>
     </button>`;
   };
-  const sorted = list => list.slice().sort((a, b) => nextDue(a).localeCompare(nextDue(b)));
+  let sub;
+  if (!recs.length) sub = 'Miete, Strom, Versicherung – einmal eintragen, die App kümmert sich um den Rest.';
+  else if (pend.length) sub = `<b style="color:var(--danger)">${pend.length > 1 ? pend.length + ' Beträge' : '1 Betrag'} noch einzutragen</b>`;
+  else if (coming.length) sub = `Kommt noch: <b class="num">${coming.length}</b> · im Schnitt ≈ ${money0(pm)} pro Monat`;
+  else sub = `Im Schnitt ≈ <b class="num">${money0(pm)}</b> pro Monat · ${money0(pm * 12)} im Jahr`;
+
   $('#view').innerHTML = `
-    <h1 class="page-h">Fixkosten</h1>
-    <section class="hero" style="padding-top:0">
-      <p class="hero-l">Fixkosten pro Monat</p>
-      <p class="hero-n num">${money(pm)}</p>
-      <p class="hero-s">${out.length ? `<b class="num">${money0(pm * 12)}</b> im Jahr${budget ? ` · ${Math.round(pm / budget * 100)} % deines Budgets` : ''}` : 'Miete, Versicherung, Abos – einmal eintragen, dann bucht die App sie selbst.'}</p>
+    ${monthBar(ym)}
+    <section class="hero">
+      <p class="hero-l">Fixkosten im ${monthName(ym)}</p>
+      <p class="hero-n num" id="fixSum">${money(sum)}</p>
+      <p class="hero-s">${sub}</p>
     </section>
-    <button class="btn primary" style="width:100%;margin-bottom:8px" data-a="addRec">+ Fixkosten hinzufügen</button>
-    <div class="sec-h"><h2>Ausgaben</h2><span>nach Fälligkeit</span></div>
-    <div class="card">${out.length ? sorted(out).map(row).join('') : '<div class="empty"><b>Noch keine Fixkosten</b>Tipp oben auf „Fixkosten hinzufügen“.</div>'}</div>
-    ${inc.length ? `<div class="sec-h"><h2>Feste Einnahmen</h2></div><div class="card">${sorted(inc).map(row).join('')}</div>` : ''}
-    <p class="note">Bei Beträgen, die nicht monatlich anfallen, zeigt „≈ / Monat“, wie viel du dafür jeden Monat zur Seite legen solltest.</p>`;
+    ${pend.length ? `<div class="sec-h"><h2>Betrag eintragen</h2><span>${pend.length}</span></div>
+      <div class="card fx-pend">${pend.map(pendRow).join('')}</div>` : ''}
+    <div class="sec-h"><h2>Abgebucht im ${monthName(ym)}</h2><span class="num">${booked.length ? money0(sum) : ''}</span></div>
+    <div class="card">${booked.length ? booked.map(bookedRow).join('') : '<div class="empty">In diesem Monat noch nichts abgebucht.</div>'}</div>
+    ${coming.length ? `<div class="sec-h"><h2>Kommt noch im ${monthName(ym)}</h2></div><div class="card">${coming.map(comingRow).join('')}</div>` : ''}
+    <div class="sec-h"><h2>Alle Fixkosten</h2><span>${recs.length || ''}</span></div>
+    <div class="card">${recs.length ? recs.slice().sort((a, b) => a.note.localeCompare(b.note, 'de')).map(defRow).join('') : '<div class="empty"><b>Noch keine Fixkosten</b>Tipp unten auf „Fixkosten hinzufügen“.</div>'}
+      <button class="more-btn" data-a="addRec">+ Fixkosten hinzufügen</button></div>
+    <p class="note">Fixkosten zählen nicht zu deinen Ausgaben in der Übersicht – sie haben hier ihre eigene Summe.${recs.some(r => every(r) > 1) ? ' „≈ / Monat“ zeigt, wie viel du für seltene Zahlungen jeden Monat zur Seite legen kannst.' : ''}</p>`;
+  updateBadge();
 }
 
 /* ---------- Auswertung ---------- */
@@ -574,6 +713,7 @@ function renderStats() {
   $('#view').innerHTML = `
     ${monthBar(ym)}
     <div class="sec-h"><h2>Wohin ging das Geld</h2><span class="num">${money0(d.spent)}</span></div>
+    <p class="note" style="padding:0 4px 10px;margin-top:-4px">Nur Ausgaben – Fixkosten haben ihren eigenen Reiter.</p>
     <div class="card">${share || '<div class="empty"><b>Keine Ausgaben</b>In diesem Monat ist noch nichts gebucht.</div>'}</div>
     <div class="sec-h"><h2>Ausgaben der letzten 12 Monate</h2></div>
     <div class="card chart">
@@ -612,7 +752,7 @@ function csvText() {
   const rows = S.tx.slice().sort((a, b) => a.date.localeCompare(b.date)).map(t => {
     const [Y, M, D] = t.date.split('-');
     const amt = ((t.type === 'in' ? 1 : -1) * t.amount / 100).toFixed(2).replace('.', ',');
-    return [`${D}.${M}.${Y}`, t.type === 'in' ? 'Einnahme' : 'Ausgabe', q(catById(t.cat)?.name || ''), amt, q(t.note || '')].join(';');
+    return [`${D}.${M}.${Y}`, t.fixed ? 'Fixkosten' : t.type === 'in' ? 'Einnahme' : 'Ausgabe', q(t.fixed ? '' : catById(t.cat)?.name || ''), amt, q(t.note || '')].join(';');
   });
   return '﻿' + ['Datum;Typ;Kategorie;Betrag;Notiz', ...rows].join('\r\n');
 }
@@ -623,6 +763,7 @@ function checkBackup(data) {
 function applyBackup(data) {
   checkBackup(data);
   S.cats = data.cats; S.tx = data.tx; S.rec = Array.isArray(data.rec) ? data.rec : [];
+  migrate();
   S.setup = true; S.firstUse = S.firstUse || Date.now();
 }
 
@@ -659,7 +800,7 @@ const A = {
     renderSettings();
   },
   closeSheet,
-  edit(el) { const t = S.tx.find(x => x.id === el.dataset.id); if (t) openAdd(t); },
+  edit(el) { const t = S.tx.find(x => x.id === el.dataset.id); if (t) t.fixed ? openFixTx(t) : openAdd(t); },
   type(el) {
     const t = UI.sheet; if (t.type === el.dataset.t) return;
     t.type = el.dataset.t; t.cat = null; drawAdd(true);
@@ -675,13 +816,22 @@ const A = {
     S.tx = S.tx.filter(x => x !== t); await save(); closeSheet(); route();
     toast('Buchung gelöscht', { label: 'Rückgängig', fn: async () => { S.tx.push(t); await save(); route(); } });
   },
-  month(el) { UI.cur = shiftMonth(UI.cur, +el.dataset.d); UI.filter = null; UI.showAll = false; location.hash.startsWith('#/stats') ? renderStats() : renderHome(); },
+  month(el) { UI.cur = shiftMonth(UI.cur, +el.dataset.d); UI.filter = null; UI.showAll = false; route(); },
   pickMonth(el) { UI.cur = el.dataset.m; renderStats(); },
   addRec() { openRec(); },
   editRec(el) { const r = recById(el.dataset.id); if (r) openRec(r); },
+  payFix(el) { const p = pendingList().find(x => x.r.id === el.dataset.id && x.m === el.dataset.m); if (p) openFixTx(null, p); },
+  editFixTx(el) { const t = S.tx.find(x => x.id === el.dataset.id); if (t) openFixTx(t); },
+  async skipFix() {
+    const t = UI.sheet, r = recById(t.recId); if (!r) return;
+    (r.skip = r.skip || []).push(t.dueM); await save(); closeSheet(); renderFixed();
+    toast(`${r.note}: ${monthName(t.dueM)} ohne Abbuchung`, { label: 'Rückgängig', fn: async () => { r.skip = r.skip.filter(m => m !== t.dueM); await save(); renderFixed(); } });
+  },
   async delRec() {
     const r = recById(UI.sheet.id); if (!r) return;
-    S.rec = S.rec.filter(x => x !== r); await save(); closeSheet(); renderFixed();
+    const ok = await askConfirm({ title: `„${r.note}“ löschen?`, text: 'Es wird nichts mehr dafür eingetragen. Was schon abgebucht ist, bleibt erhalten.', ok: 'Löschen' });
+    if (!ok) return;
+    S.rec = S.rec.filter(x => x !== r); await save(); renderFixed();
     toast('Fixkosten entfernt', { label: 'Rückgängig', fn: async () => { S.rec.push(r); await save(); renderFixed(); } });
   },
   async backup() {
@@ -710,7 +860,7 @@ const A = {
     const c = catById(el.dataset.id);
     if (activeCats(c.kind).length <= 1) return toast('Mindestens eine Kategorie muss bleiben');
     const n = S.tx.filter(t => t.cat === c.id).length, used = n > 0;
-    const recs = S.rec.filter(r => r.cat === c.id).length;
+    const recs = 0;
     const ok = await askConfirm({
       title: `„${c.name}“ entfernen?`,
       text: (used ? `${n} Buchung${n > 1 ? 'en gehören' : ' gehört'} zu dieser Kategorie. Sie bleiben erhalten und zählen weiter in die Auswertung.` : 'Zu dieser Kategorie gibt es noch keine Buchungen.')
@@ -755,7 +905,8 @@ document.addEventListener('input', e => {
   }
 });
 document.addEventListener('change', async e => {
-  if (e.target.id === 'fNext') { const h = $('#fNextHint'); if (h) h.textContent = nextHint(e.target.value); }
+  if (e.target.id === 'fNext') { const h = $('#fNextHint'); if (h) h.textContent = nextHint(e.target.value, UI.sheet?.vary); }
+  if (e.target.id === 'fVary' && UI.sheet) { UI.sheet.vary = e.target.checked; drawAdd(true); }
   if (e.target.id === 'fileBackup' && e.target.files[0]) {
     try {
       const data = JSON.parse(await e.target.files[0].text());
@@ -771,7 +922,7 @@ document.addEventListener('keydown', e => {
   const nc = e.target.closest && e.target.closest('[data-newcat]');
   if (nc && e.key === 'Enter') { e.preventDefault(); addCategory(nc.dataset.newcat); return; }
   if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet();
-  if (e.key === 'Enter' && UI.sheet && e.target.closest('#sheet') && e.target.tagName === 'INPUT' && (UI.sheet.id || UI.sheet.preset || UI.sheet.mode === 'rec')) { e.preventDefault(); commitTx(); }
+  if (e.key === 'Enter' && UI.sheet && e.target.closest('#sheet') && e.target.tagName === 'INPUT' && (UI.sheet.id || UI.sheet.preset || UI.sheet.mode !== 'tx')) { e.preventDefault(); commitTx(); }
   // Mac: „n" öffnet Erfassen
   if (e.key === 'n' && !e.metaKey && !e.ctrlKey && S.setup && $('#sheet').hidden && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) { e.preventDefault(); openAdd(); }
 });
