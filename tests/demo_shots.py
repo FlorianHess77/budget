@@ -85,6 +85,16 @@ async def main():
         await pg.screenshot(path=f'{OUT}/8-mac-auswertung-fix.png')
         await pg.click('.seg3 [data-m="all"]'); await pg.wait_for_timeout(300)
         await pg.screenshot(path=f'{OUT}/9-mac-auswertung-gesamt.png')
+        # Android (Pixel 7, Chrome)
+        dev = {**p.devices['Pixel 7'], 'viewport': {'width': 412, 'height': 1500}}
+        ctx = await b.new_context(**dev, locale='de-AT', color_scheme='light')
+        pg = await ctx.new_page()
+        await pg.goto(BASE); await pg.wait_for_timeout(300)
+        await pg.evaluate("s => { Object.assign(S, s); S.firstUse = Date.now(); S.lastBackup = Date.now(); migrate(); materialize(); return save(); }", state)
+        await pg.reload(); await pg.wait_for_timeout(500)
+        await pg.screenshot(path=f'{OUT}/a1-android-laufende-kosten.png')
+        await pg.goto(BASE + '#/fixed'); await pg.wait_for_timeout(400)
+        await pg.screenshot(path=f'{OUT}/a2-android-fixkosten.png')
         await b.close()
 
 asyncio.run(main())

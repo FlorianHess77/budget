@@ -100,7 +100,7 @@ const HELP = [
     <p>Deine Daten liegen <b>nur auf diesem Gerät</b>, nicht im Internet. Mach deshalb ab und zu ein Backup. Die App erinnert dich, wenn das letzte über 30 Tage alt ist.</p>
     <ol>
       <li>Einstellungen → <b>Backup speichern</b>.</li>
-      <li><b>iPhone:</b> Im Teilen-Menü „In Dateien sichern“ wählen, am besten <b>iCloud Drive</b>.<br><b>Mac:</b> Die Datei landet im Ordner <b>Downloads</b>.</li>
+      <li><b>iPhone:</b> Im Teilen-Menü „In Dateien sichern“ wählen, am besten <b>iCloud Drive</b>.<br><b>Mac:</b> Die Datei landet im Ordner <b>Downloads</b>.<br><b>Android:</b> Im Teilen-Menü z. B. <b>Drive</b> wählen – oder die Datei landet im Ordner <b>Downloads</b>.</li>
     </ol>
     <p>Die Datei heißt z. B. <b>budget-backup-2026-11-13.json</b>.</p>
     <p><b>Zurückholen:</b> Einstellungen → <b>Backup laden</b> → Datei auswählen.</p>
@@ -110,7 +110,7 @@ const HELP = [
     id: 'sync', t: 'Zwischen iPhone und Mac übertragen', b: `
     <p>iPhone und Mac gleichen sich nicht automatisch ab. So bringst du die Daten rüber:</p>
     <ol>
-      <li>Auf dem Gerät mit den aktuellen Daten: <b>Backup speichern</b> in iCloud Drive (oder per AirDrop schicken).</li>
+      <li>Auf dem Gerät mit den aktuellen Daten: <b>Backup speichern</b> – am iPhone in iCloud Drive oder per AirDrop, am Android-Handy z. B. in Google Drive oder per Mail.</li>
       <li>Auf dem anderen Gerät: <b>Backup laden</b> und die Datei auswählen.</li>
     </ol>
     <p class="tip">Am einfachsten: Buchungen hauptsächlich auf einem Gerät erfassen, das andere nur zum Ansehen nutzen.</p>`
@@ -135,6 +135,7 @@ const HELP = [
     id: 'install', t: 'App installieren und aktualisieren', b: `
     <p><b>iPhone:</b> In Safari öffnen → <b>Teilen</b> → <b>Zum Home-Bildschirm</b>.</p>
     <p><b>Mac:</b> In Safari öffnen → Menü <b>Ablage</b> → <b>Zum Dock hinzufügen</b>.</p>
+    <p><b>Android:</b> In Chrome öffnen → oben rechts <b>⋮</b> → <b>App installieren</b> (oder <b>Zum Startbildschirm hinzufügen</b>). Oder in den Einstellungen auf <b>App installieren</b> tippen, wenn der Knopf dort erscheint.</p>
     <p>Die App funktioniert danach auch <b>ohne Internet</b>.</p>
     <p><b>Updates:</b> kommen automatisch. Falls etwas Neues fehlt, die App ganz schließen und wieder öffnen.</p>`
   }

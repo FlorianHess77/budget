@@ -1,7 +1,7 @@
 'use strict';
 // Budget – Ausgaben erfassen, Monat im Blick. Reines JS, Daten lokal in IndexedDB.
 // Bei Änderungen APP_VER hochzählen, damit iPhone und Mac das Update bekommen.
-const APP_VER = '1.9.0';
+const APP_VER = '1.10.0';
 
 /* ---------- Hilfen ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -351,9 +351,7 @@ function openSheet(t, title, select) {
   UI.sheet = t;
   $('#sheetTitle').textContent = title;
   drawAdd();
-  $('#toast').hidden = true;
-  $('#sheet').hidden = false;
-  document.body.style.overflow = 'hidden';
+  showSheet();
   const a = $(t.mode === 'rec' && !t.id ? '#fNote' : '#fAmt');
   a.focus({ preventScroll: true });
   if (select && a.id === 'fAmt') a.select();
@@ -540,17 +538,33 @@ async function commitTx() {
     msg = 'Änderung gespeichert';
   }
   await save();
-  closeSheet();
+  const toStats = location.hash.startsWith('#/stats');
+  closeSheet(toStats ? undefined : '#/');
   UI.cur = monthOf(data.date);
   if (UI.filter && UI.filter !== data.cat) UI.filter = null;
-  if (location.hash.startsWith('#/stats')) renderStats(); else { location.hash = '#/'; route(); }
+  toStats ? renderStats() : route();
   toast(msg);
 }
-function closeSheet() {
+// Android: Die Zurück-Taste soll ein offenes Fenster schließen, nicht die App verlassen.
+// Deshalb bekommt jedes Fenster einen eigenen Eintrag im Verlauf.
+function showSheet() {
+  $('#toast').hidden = true;
+  $('#sheet').hidden = false; document.body.style.overflow = 'hidden';
+  if (!(history.state && history.state.sheet)) history.pushState({ sheet: 1 }, '');
+}
+// nav: 'pop' = durch Zurück-Taste geschlossen; '#/…' = danach direkt dorthin; sonst Eintrag zurücknehmen
+function closeSheet(nav) {
   $('#sheet').hidden = true; UI.sheet = null;
   document.body.style.overflow = '';
   if (UI.confirm) { const r = UI.confirm; UI.confirm = null; r(false); }
+  if (nav === 'pop') return;
+  if (typeof nav === 'string') history.replaceState(null, '', nav);
+  else if (history.state && history.state.sheet) { UI.skipPop = true; history.back(); }
 }
+window.addEventListener('popstate', () => {
+  if (UI.skipPop) { UI.skipPop = false; return; }
+  if (!$('#sheet').hidden) closeSheet('pop');
+});
 // Bestätigung im eigenen Fenster (große, gut lesbare Knöpfe)
 function askConfirm({ title, text, ok }) {
   return new Promise(resolve => {
@@ -559,8 +573,7 @@ function askConfirm({ title, text, ok }) {
     $('#sheetTitle').textContent = title;
     $('#sheet .sheet-body').innerHTML = `<p class="confirm-t">${text}</p>
       <div class="sheet-foot"><button class="btn wide" data-a="confirmNo">Abbrechen</button><button class="btn danger-solid wide" data-a="confirmYes">${esc(ok)}</button></div>`;
-    $('#toast').hidden = true;
-    $('#sheet').hidden = false; document.body.style.overflow = 'hidden';
+    showSheet();
     $('[data-a="confirmNo"]').focus();
   });
 }
@@ -601,6 +614,7 @@ function renderSettings() {
       </div>
       <p class="note">${S.lastBackup ? `Letztes Backup: ${new Date(S.lastBackup).toLocaleDateString('de-AT')}.` : 'Noch kein Backup gespeichert.'} Deine Daten liegen nur auf diesem Gerät. Zum Übertragen aufs andere Gerät: hier Backup speichern, dort Backup laden.</p>
     </div>
+    ${installCard()}
     <div class="sec-h"><h2>Darstellung</h2></div>
     <div class="card">
       <p class="pick-h" style="margin:14px 2px 0">Schriftgröße</p>
@@ -633,8 +647,7 @@ function openHistory(id) {
     <div class="hist-list">${list || '<div class="empty"><b>Noch keine Buchungen</b>Mit dem Knopf unten fügst du die erste hinzu.</div>'}
       ${all.length > shown.length ? `<button class="more-btn" data-a="histAll">Alle ${all.length} anzeigen</button>` : ''}</div>
     <div class="sheet-foot hist-foot"><button class="btn primary wide" data-a="addTo" data-id="${c.id}">+ Ausgabe zu ${esc(c.name)}</button></div>`;
-  $('#toast').hidden = true;
-  $('#sheet').hidden = false; document.body.style.overflow = 'hidden';
+  showSheet();
   $('#sheet .sheet-card').scrollTop = 0;
 }
 
@@ -677,7 +690,7 @@ function renderFixed() {
   let sub = '', sub2 = '';
   if (!recs.length && !booked.length) sub = 'Miete, Strom, Kredit – einmal eintragen, die App kümmert sich um den Rest.';
   else {
-    sub = fm.restSum ? `<span id="fixPaid">schon abgebucht <b class="num">${money(fm.paid)}</b></span> · kommt noch <b class="num">${fm.estimated ? '≈ ' : ''}${money(fm.restSum)}</b>` : (ym === now && !booked.length ? '' : '<span id="fixPaid">alles abgebucht</span>');
+    sub = fm.restSum ? `<span id="fixPaid">schon abgebucht <b class="num nw">${money(fm.paid)}</b></span> · <span class="nw">kommt noch <b class="num">${fm.estimated ? '≈\u00a0' : ''}${money(fm.restSum)}</b></span>` : (ym === now && !booked.length ? '' : '<span id="fixPaid">alles abgebucht</span>');
     if (pend.length) sub2 = `<b style="color:var(--danger)">${pend.length > 1 ? pend.length + ' Beträge' : '1 Betrag'} noch einzutragen</b>`;
     else if (ym === now) sub2 = `Im Schnitt ≈ ${money0(pm)} pro Monat · ${money0(pm * 12)} im Jahr`;
   }
@@ -859,6 +872,24 @@ function applyBackup(data) {
   S.setup = true; S.firstUse = S.firstUse || Date.now();
 }
 
+/* ---------- Installieren ---------- */
+let installEvt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; if (location.hash.startsWith('#/settings')) renderSettings(); });
+window.addEventListener('appinstalled', () => { installEvt = null; toast('App installiert'); if (location.hash.startsWith('#/settings')) renderSettings(); });
+const isInstalled = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isAndroid = /Android/i.test(navigator.userAgent);
+const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function installCard() {
+  if (isInstalled()) return '';
+  let body;
+  if (installEvt) body = `<button class="btn primary" style="width:100%;margin:14px 0 6px" data-a="install">App installieren</button>
+      <p class="note">Danach startet Budget wie eine normale App vom Startbildschirm, ohne Browserleiste.</p>`;
+  else if (isIOS) body = '<p class="note" style="padding-top:14px">In Safari unten auf <b>Teilen</b> tippen und <b>Zum Home-Bildschirm</b> wählen.</p>';
+  else if (isAndroid) body = '<p class="note" style="padding-top:14px">In Chrome oben rechts auf <b>⋮</b> tippen und <b>App installieren</b> (oder <b>Zum Startbildschirm hinzufügen</b>) wählen.</p>';
+  else body = '<p class="note" style="padding-top:14px">Safari am Mac: Menü <b>Ablage → Zum Dock hinzufügen</b>. Chrome: Symbol <b>Installieren</b> rechts in der Adressleiste.</p>';
+  return `<div class="sec-h"><h2>App installieren</h2></div><div class="card">${body}</div>`;
+}
+
 /* ---------- Toast ---------- */
 let toastT;
 function toast(msg, action) {
@@ -873,6 +904,12 @@ function toast(msg, action) {
 const A = {
   add() { location.hash.startsWith('#/fixed') ? openRec() : openAdd(); },
   addTo(el) { openAdd(null, el.dataset.id); },
+  async install() {
+    if (!installEvt) return;
+    installEvt.prompt();
+    try { await installEvt.userChoice; } catch (e) {}
+    installEvt = null; renderSettings();
+  },
   newCat(el) { addCategory(el.dataset.kind); },
   catHist(el) { UI.histAll = false; openHistory(el.dataset.id); },
   histAll() { UI.histAll = true; openHistory(UI.hist); },
@@ -1019,7 +1056,7 @@ document.addEventListener('keydown', e => {
   // Mac: „n" öffnet Erfassen
   if (e.key === 'n' && !e.metaKey && !e.ctrlKey && S.setup && $('#sheet').hidden && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) { e.preventDefault(); A.add(); }
 });
-window.addEventListener('hashchange', () => { if (!$('#sheet').hidden) closeSheet(); route(); });
+window.addEventListener('hashchange', () => { if (!$('#sheet').hidden) closeSheet('pop'); route(); });
 // Neuer Tag / neuer Monat, wenn die App lange offen bleibt
 document.addEventListener('visibilitychange', () => { if (!document.hidden && $('#sheet').hidden && S.setup) { materialize(); route(); } });
 

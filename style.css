@@ -50,6 +50,7 @@ button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 .num { font-variant-numeric: tabular-nums; }
 [hidden] { display: none !important; }
+.nw { white-space: nowrap; }
 :root { --zoom: 1; }
 :root[data-fs="l"] { --zoom: 1.15; }
 :root[data-fs="xl"] { --zoom: 1.3; }

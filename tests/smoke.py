@@ -318,6 +318,49 @@ async def run(theme):
         await pg.screenshot(path=f'{OUT}/{theme}-12-mac-fixkosten.png')
         await b.close()
 
+async def run_android():
+    """Android (Pixel 7, Chrome): Zurück-Taste schließt Fenster statt die App zu verlassen."""
+    async with async_playwright() as p:
+        b = await p.chromium.launch()
+        ctx = await b.new_context(**p.devices['Pixel 7'], locale='de-AT')
+        pg = await ctx.new_page()
+        pg.on('pageerror', lambda e: errors.append(f'android: JS-Fehler {e}'))
+        await pg.goto(BASE); await pg.wait_for_timeout(300)
+        await pg.click('[data-a="finishSetup"]'); await pg.wait_for_timeout(300)
+        await pg.click('.cat:has-text("Lebensmittel") .cat-add'); await pg.wait_for_timeout(150)
+        await pg.fill('#fAmt', '12,40'); await pg.fill('#fNote', 'Billa'); await pg.click('[data-a="saveTx"]'); await pg.wait_for_timeout(250)
+        check(await pg.locator('.tx').count() == 1, 'android: Buchung gespeichert')
+        # Zurück-Taste bei offenem Fenster
+        await pg.click('.nav-add'); await pg.wait_for_timeout(150)
+        await pg.go_back(); await pg.wait_for_timeout(250)
+        check(await pg.locator('#sheet').is_hidden() and await pg.locator('.tab-head').count() == 1 and pg.url.startswith(BASE), 'android: Zurück schließt das Fenster, App bleibt offen')
+        # Fenster mit X schließen, danach führt Zurück zum vorigen Reiter
+        await pg.click('[data-tab="fixed"]'); await pg.wait_for_timeout(200)
+        await pg.click('.nav-add'); await pg.wait_for_timeout(150)
+        await pg.click('.sheet-head [data-a="closeSheet"]'); await pg.wait_for_timeout(250)
+        await pg.go_back(); await pg.wait_for_timeout(250)
+        check('Laufende Kosten' in await pg.inner_text('.tab-head'), 'android: nach dem Schließen führt Zurück zum vorigen Reiter')
+        # Nach dem Speichern aus der Auswertung: Zurück führt in die Auswertung
+        await pg.click('[data-tab="stats"]'); await pg.wait_for_timeout(200)
+        await pg.click('.nav-add'); await pg.wait_for_timeout(150)
+        await pg.fill('#fAmt', '5'); await pg.click('.chip:has-text("Freizeit")'); await pg.wait_for_timeout(250)
+        await pg.click('[data-tab="home"]'); await pg.wait_for_timeout(200)
+        await pg.go_back(); await pg.wait_for_timeout(250)
+        check('Auswertung' in await pg.inner_text('.tab-head') and await pg.locator('#sheet').is_hidden(), 'android: Verlauf bleibt sauber nach dem Speichern')
+        # Bestätigung mit Zurück abbrechen
+        await pg.click('[data-tab="settings"]'); await pg.wait_for_timeout(200)
+        await pg.click('.set-row:has(input[value="Abos"]) [data-a="delCat"]'); await pg.wait_for_timeout(150)
+        await pg.go_back(); await pg.wait_for_timeout(250)
+        check(await pg.locator('#sheet').is_hidden() and await pg.locator('input[value="Abos"]').count() == 1, 'android: Zurück bricht Löschen ab')
+        check(await pg.locator('.sec-h:has-text("App installieren")').count() == 1 and 'Chrome' in await pg.inner_text('#view'), 'android: Anleitung zum Installieren')
+        m = await pg.evaluate("fetch('manifest.webmanifest').then(r=>r.json())")
+        sizes = {i['sizes'] for i in m['icons']}
+        check(m['display'] == 'standalone' and {'192x192', '512x512'} <= sizes and any(i.get('purpose') == 'maskable' for i in m['icons']), 'android: Manifest erfüllt die Installationsregeln von Chrome')
+        await pg.click('[data-tab="home"]'); await pg.wait_for_timeout(200)
+        await pg.screenshot(path=f'{OUT}/android-laufende-kosten.png')
+        await b.close()
+
 asyncio.run(run('light'))
 asyncio.run(run('dark'))
+asyncio.run(run_android())
 print('\n' + ('ALLES OK' if not errors else f'{len(errors)} Fehler:\n' + '\n'.join(errors)))
