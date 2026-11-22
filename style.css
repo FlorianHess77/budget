@@ -384,6 +384,25 @@ button { cursor: pointer; }
 .sum-t span { font-weight: 700; }
 .sum-t b { font-size: 22px; }
 
+/* Kopfzeile je Reiter: Laufende Kosten (grün) und Fixkosten (blau) sind klar getrennt */
+:root { --run: #175A48; --run-soft: #DCEFE7; --fix: #1F4E9A; --fix-soft: #DDE7F7; }
+:root[data-theme="dark"] { --run: #7EE0BD; --run-soft: #17332A; --fix: #9DBDF5; --fix-soft: #1A2740; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --run: #7EE0BD; --run-soft: #17332A; --fix: #9DBDF5; --fix-soft: #1A2740; } }
+.tab-head { display: flex; align-items: center; gap: 12px; font-size: 24px; font-weight: 700; border-radius: var(--r); padding: 12px 16px; margin: 0 0 12px; }
+.tab-head svg { width: 28px; height: 28px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.th-run { background: var(--run-soft); color: var(--run); }
+.th-fix { background: var(--fix-soft); color: var(--fix); }
+.nav-i[data-tab="home"].on { color: var(--run); }
+.nav-i[data-tab="fixed"].on { color: var(--fix); }
+@media (min-width: 900px) {
+  .nav-i[data-tab="home"].on { background: var(--run-soft); }
+  .nav-i[data-tab="fixed"].on { background: var(--fix-soft); }
+  .nav-i[data-tab="stats"] { margin-top: 10px; }
+}
+.nav-add.fx-mode { background: var(--fix); color: var(--fix-soft); }
+:root[data-theme="dark"] .nav-add.fx-mode { color: #0B1528; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .nav-add.fx-mode { color: #0B1528; } }
+
 /* Hilfe */
 .help { padding: 0 18px; }
 .help details { border-bottom: 1px solid var(--line); }

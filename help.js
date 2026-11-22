@@ -16,7 +16,7 @@ const HELP = [
     <p>Es gibt zwei Wege:</p>
     <ol>
       <li><b>Großes Plus</b> unten (am Mac: „Erfassen“ links oben). Betrag eintippen, dann die <b>Kategorie antippen</b> – das speichert sofort.</li>
-      <li><b>Farbiges Plus</b> neben einer Kategorie auf der Übersicht. Die Kategorie ist dann schon gewählt. Betrag eintippen und <b>Speichern</b> drücken (oder die Eingabetaste).</li>
+      <li><b>Farbiges Plus</b> neben einer Kategorie im Reiter <b>Laufende Kosten</b>. Die Kategorie ist dann schon gewählt. Betrag eintippen und <b>Speichern</b> drücken (oder die Eingabetaste).</li>
     </ol>
     <p>Ins große Feld <b>Notiz</b> schreibst du, wofür das Geld war, z. B. „Billa“ – dann findest du die Buchung später leicht wieder. Das Datum kannst du ändern, sonst gilt heute.</p>
     <p>Unter dem Notizfeld stehen deine <b>häufigsten Notizen</b>. Sobald du tippst, zeigt die App nur noch die passenden – z. B. bei „bi“ deine frühere Notiz „Billa“. Ein Tipp auf einen Vorschlag füllt die Notiz aus und wählt beim großen Plus gleich die passende Kategorie. Was du selbst tippst, wird nie automatisch verändert.</p>
@@ -29,34 +29,35 @@ const HELP = [
       <li>Oben auf <b>Einnahme</b> umschalten.</li>
       <li>Betrag eintippen und z. B. <b>Gehalt</b> antippen.</li>
     </ol>
-    <p>Einnahmen erscheinen auf der Übersicht unter der großen Zahl. Darunter steht, wie viel nach Ausgaben und Fixkosten übrig bleibt.</p>`
+    <p>Einnahmen erscheinen im Reiter <b>Laufende Kosten</b> unter der großen Zahl.</p>`
   },
   {
     id: 'edit', t: 'Buchung ändern oder löschen', b: `
     <ol>
-      <li>Auf der Übersicht unter <b>Buchungen</b> die Buchung antippen.</li>
+      <li>Im Reiter <b>Laufende Kosten</b> unter <b>Buchungen</b> die Buchung antippen.</li>
       <li>Betrag, Datum, Notiz oder Kategorie ändern und <b>Speichern</b> drücken.</li>
       <li>Oder <b>Löschen</b> drücken.</li>
     </ol>
     <p class="tip">Versehentlich gelöscht? Unten erscheint kurz <b>Rückgängig</b> – einfach antippen.</p>`
   },
   {
-    id: 'overview', t: 'Die Übersicht verstehen', b: `
+    id: 'overview', t: 'Laufende Kosten verstehen', b: `
+    <p>Die App hat zwei getrennte Bereiche: <b>Laufende Kosten</b> (grün) für alles, was du selbst einkaufst und bezahlst, und <b>Fixkosten</b> (blau) für regelmäßige Abbuchungen wie Miete oder Kredit. Die Zahlen werden nie vermischt.</p>
     <ul>
-      <li><b>Große Zahl:</b> so viel hast du in diesem Monat ausgegeben – <b>ohne Fixkosten</b>. Die stehen im eigenen Reiter.</li>
+      <li><b>Große Zahl:</b> so viel hast du in diesem Monat für laufende Kosten ausgegeben.</li>
       <li><b>Darunter:</b> wie viel vom Budget noch übrig ist.</li>
       <li><b>Kategorien:</b> rechts steht, wie viel du schon ausgegeben hast, darunter, wie viel noch übrig ist.</li>
-      <li><b>Rot</b> bedeutet: mehr als 80 % verbraucht oder schon darüber. Ist ein Budget genau aufgebraucht (z. B. die Miete), bleibt es grün.</li>
+      <li><b>Rot</b> bedeutet: mehr als 80 % verbraucht oder schon darüber. Ist ein Budget genau aufgebraucht, bleibt es grün.</li>
       <li><b>Kategorie antippen</b> öffnet ihren Verlauf: alle Buchungen nach Monat, mit der Summe je Monat. Eine Buchung darin antippen, um sie zu ändern.</li>
       <li>Mit den <b>Pfeilen</b> neben dem Monat blätterst du zu früheren Monaten.</li>
     </ul>`
   },
   {
     id: 'rec', t: 'Fixkosten (Miete, Strom, Versicherung …)', b: `
-    <p>Fixkosten haben ihren <b>eigenen Reiter</b> und eine eigene Summe. Sie zählen <b>nicht</b> zu den Ausgaben in der Übersicht und nicht zu den Budgets der Kategorien.</p>
+    <p>Fixkosten haben ihren <b>eigenen Reiter</b> (blau) mit eigener Summe. Sie werden nie mit den laufenden Kosten zusammengerechnet.</p>
     <p><b>Neue Fixkosten anlegen:</b></p>
     <ol>
-      <li>Reiter <b>Fixkosten</b> öffnen → <b>+ Fixkosten hinzufügen</b>.</li>
+      <li>Reiter <b>Fixkosten</b> öffnen und auf das blaue <b>Plus</b> tippen (oder unten <b>+ Fixkosten hinzufügen</b>).</li>
       <li>Bei <b>Wofür?</b> den Namen schreiben, z. B. „Strom“.</li>
       <li>Ist der Betrag jedes Mal anders (Strom, Telefon …), den Haken <b>Betrag ist jedes Mal anders</b> setzen. Sonst den Betrag eintragen.</li>
       <li>Bei <b>Wie oft</b> wählen: monatlich, alle 2 Monate, vierteljährlich, halbjährlich oder jährlich.</li>
@@ -71,8 +72,8 @@ const HELP = [
   },
   {
     id: 'stats', t: 'Statistik', b: `
+    <p>Die Statistik zeigt nur die <b>laufenden Kosten</b>. Fixkosten siehst du im Reiter Fixkosten, mit den Pfeilen auch für frühere Monate.</p>
     <ul>
-      <li><b>Der Monat im Überblick:</b> Ausgaben ohne Fixkosten, Fixkosten und beides zusammen – jeweils extra zusammengerechnet. Darunter Einnahmen und was übrig bleibt.</li>
       <li><b>Wohin ging das Geld:</b> alle Kategorien des Monats, die teuerste zuerst, mit Anteil in Prozent.</li>
       <li><b>Letzte 12 Monate:</b> eine Säule pro Monat. Die Linie zeigt dein Monatsbudget. Rote Säulen liegen darüber.</li>
       <li>Eine <b>Säule antippen</b> zeigt diesen Monat oben an.</li>

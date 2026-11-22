@@ -62,7 +62,7 @@ async def run(theme):
         spent = await pg.inner_text('#spent')
         check(spent.replace(' ', ' ') == '1.501,85 €', f'{theme}: Monatsausgaben 1.501,85 € (ist {spent})')
         check(await pg.locator('.cat.warn').count() == 2, f'{theme}: Auto und Freizeit als Warnung')
-        check('bleiben' in await pg.inner_text('.hero'), f'{theme}: Einnahmen und Rest angezeigt')
+        check('Einnahmen' in await pg.inner_text('.hero') and 'bleiben' not in await pg.inner_text('.hero'), f'{theme}: Einnahmen angezeigt, nichts mit Fixkosten verrechnet')
         await shot('04-uebersicht')
 
         # Bearbeiten
@@ -165,6 +165,11 @@ async def run(theme):
             if amount: await pg.fill('#fAmt', amount)
             await pg.select_option('#fEvery', every_); await pg.fill('#fNext', first)
             await pg.click('[data-a="saveTx"]'); await pg.wait_for_timeout(200)
+        # Das Plus legt im Fixkosten-Reiter Fixkosten an
+        check('Fixkosten' in await pg.inner_text('.tab-head') and await pg.get_attribute('.nav-add', 'aria-label') == 'Fixkosten hinzufügen', f'{theme}: blauer Fixkosten-Reiter, Plus für Fixkosten')
+        await pg.click('.nav-add'); await pg.wait_for_timeout(150)
+        check(await pg.inner_text('#sheetTitle') == 'Neue Fixkosten', f'{theme}: Plus öffnet „Neue Fixkosten“')
+        await pg.click('.sheet-head [data-a="closeSheet"]'); await pg.wait_for_timeout(100)
         # Fester Betrag, monatlich ab Vormonat → Vormonat und dieser Monat automatisch abgebucht
         await new_fix('Miete', '650', '1', prev_first)
         check(await pg.evaluate("S.tx.filter(t=>t.note==='Miete' && t.fixed).length") == 2, f'{theme}: Miete für Vormonat und diesen Monat abgebucht')
@@ -241,13 +246,11 @@ async def run(theme):
         await pg.click('[data-tab="home"]'); await pg.wait_for_timeout(200)
         check((await pg.inner_text('#spent')).replace('\u00a0', ' ') == '1.507,55 €', f'{theme}: Fixkosten zählen nicht zu den Ausgaben')
         check(await pg.locator('.tx:has-text("Miete"), .tx:has-text("Strom")').count() == 0, f'{theme}: keine Fixkosten in den Buchungen der Übersicht')
-        check('ohne Fixkosten' in await pg.inner_text('.hero-l') and 'Fixkosten' in await pg.inner_text('.hero'), f'{theme}: Übersicht sagt „ohne Fixkosten“, Rest nach allem')
+        check('Laufende Kosten' in await pg.inner_text('.tab-head') and 'Fixkosten' not in await pg.inner_text('.hero'), f'{theme}: Reiter „Laufende Kosten“ ohne Fixkosten-Zahlen')
         await shot('04-uebersicht-getrennt')
         await pg.click('[data-tab="stats"]'); await pg.wait_for_timeout(200)
         check(await pg.locator('.sh').count() == 4, f'{theme}: Auswertung ohne Fixkosten')
-        g = lambda sel: pg.inner_text(sel)
-        check((await g('#sumOut')).replace('\u00a0', ' ') == '1.507,55 €' and (await g('#sumFix')).replace('\u00a0', ' ') == '766,90 €' and (await g('#sumAll')).replace('\u00a0', ' ') == '2.274,45 €', f'{theme}: Statistik rechnet Ausgaben und Fixkosten extra und zusammen')
-        await shot('09b-ueberblick')
+        check(await pg.locator('#sumAll, #sumFix').count() == 0 and 'Fixkosten' not in (await pg.text_content('.cols')), f'{theme}: Statistik rechnet nichts mit Fixkosten zusammen')
         csv = await pg.evaluate("csvText()")
         check(';Fixkosten;' in csv, f'{theme}: CSV kennzeichnet Fixkosten')
         # Alte Daten (vor der Trennung) werden umgestellt

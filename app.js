@@ -1,7 +1,7 @@
 'use strict';
 // Budget – Ausgaben erfassen, Monat im Blick. Reines JS, Daten lokal in IndexedDB.
 // Bei Änderungen APP_VER hochzählen, damit iPhone und Mac das Update bekommen.
-const APP_VER = '1.7.1';
+const APP_VER = '1.8.0';
 
 /* ---------- Hilfen ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -204,7 +204,19 @@ function route() {
   if (h.startsWith('#/add')) { history.replaceState(null, '', '#/'); renderHome(); return openAdd(); }
   renderHome();
 }
-function setTab(t) { document.querySelectorAll('.nav-i').forEach(a => a.classList.toggle('on', a.dataset.tab === t)); }
+function setTab(t) {
+  document.querySelectorAll('.nav-i').forEach(a => a.classList.toggle('on', a.dataset.tab === t));
+  // Das Plus erfasst im Fixkosten-Reiter Fixkosten, sonst laufende Kosten
+  const add = $('.nav-add'), fx = t === 'fixed';
+  add.classList.toggle('fx-mode', fx);
+  add.setAttribute('aria-label', fx ? 'Fixkosten hinzufügen' : 'Laufende Kosten erfassen');
+  $('.nav-add-l').textContent = fx ? 'Fixkosten' : 'Erfassen';
+}
+const ICON_RUN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>';
+const ICON_FIX = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4M8 14h3"/></svg>';
+const tabHead = kind => kind === 'fixed'
+  ? `<div class="tab-head th-fix">${ICON_FIX}<span>Fixkosten</span></div>`
+  : `<div class="tab-head th-run">${ICON_RUN}<span>Laufende Kosten</span></div>`;
 
 /* ---------- Willkommen ---------- */
 function renderWelcome() {
@@ -271,14 +283,14 @@ function renderHome() {
   const shown = UI.showAll ? list : list.slice(0, 8);
 
   $('#view').innerHTML = `
+    ${tabHead('run')}
     ${monthBar(ym)}
     <section class="hero">
-      <p class="hero-l">Ausgaben im ${monthName(ym)} <span class="hero-tag">ohne Fixkosten</span></p>
+      <p class="hero-l">Laufende Kosten im ${monthName(ym)}</p>
       <p class="hero-n num" id="spent">${money(d.spent)}</p>
       <p class="hero-s">${sub}</p>
       ${budget ? `<div class="hero-bar${pct >= 0.8 ? ' warn' : ''}"><div style="width:${Math.min(100, pct * 100).toFixed(1)}%"></div></div>` : ''}
-      ${d.income ? (() => { const fx = fixedMonth(ym).total, bal = d.income - d.spent - fx; return `<p class="hero-in">Einnahmen <b class="num">${money0(d.income)}</b></p>
-        <p class="hero-in" style="margin-top:2px">Nach Ausgaben${fx ? ' und Fixkosten' : ''} bleiben <b class="num" style="color:${bal < 0 ? 'var(--danger)' : 'var(--income)'}">${bal >= 0 ? '+' : '−'}${money0(Math.abs(bal))}</b></p>`; })() : ''}
+      ${d.income ? `<p class="hero-in">Einnahmen <b class="num">${money0(d.income)}</b></p>` : ''}
     </section>
     ${backupNag()}
     <div class="sec-h"><h2>Kategorien</h2><span>${budget ? Math.round(pct * 100) + ' % vom Budget' : ''}</span></div>
@@ -286,7 +298,7 @@ function renderHome() {
 
     <div class="sec-h"><h2>${fc ? 'Buchungen · ' + esc(fc.name) : 'Buchungen'}</h2>${fc ? `<button class="more-btn" style="width:auto;padding:0" data-a="filter" data-id="">Alle zeigen</button>` : `<span>${d.tx.length || ''}</span>`}</div>
     <div class="card">
-      ${shown.length ? shown.map(txRow).join('') : `<div class="empty"><b>${fc ? 'Hier noch nichts' : 'Noch keine Buchungen'}</b>Tipp auf + und erfass deine erste Ausgabe.</div>`}
+      ${shown.length ? shown.map(txRow).join('') : `<div class="empty"><b>${fc ? 'Hier noch nichts' : 'Noch keine Buchungen'}</b>Tipp auf + und erfass deine ersten laufenden Kosten.</div>`}
       ${list.length > shown.length ? `<button class="more-btn" data-a="showAll">Alle ${list.length} anzeigen</button>` : ''}
     </div>`;
 }
@@ -671,6 +683,7 @@ function renderFixed() {
   }
 
   $('#view').innerHTML = `
+    ${tabHead('fixed')}
     ${monthBar(ym)}
     <section class="hero">
       <p class="hero-l">Fixkosten im ${monthName(ym)}${fm.restSum ? ' – alle zusammen' : ''}</p>
@@ -686,7 +699,7 @@ function renderFixed() {
     <div class="sec-h"><h2>Alle Fixkosten</h2><span>${recs.length || ''}</span></div>
     <div class="card">${recs.length ? recs.slice().sort((a, b) => a.note.localeCompare(b.note, 'de')).map(defRow).join('') : '<div class="empty"><b>Noch keine Fixkosten</b>Tipp unten auf „Fixkosten hinzufügen“.</div>'}
       <button class="more-btn" data-a="addRec">+ Fixkosten hinzufügen</button></div>
-    <p class="note">Fixkosten zählen nicht zu deinen Ausgaben in der Übersicht – sie haben hier ihre eigene Summe.${recs.some(r => every(r) > 1) ? ' „≈ / Monat“ zeigt, wie viel du für seltene Zahlungen jeden Monat zur Seite legen kannst.' : ''}</p>`;
+    ${recs.some(r => every(r) > 1) ? '<p class="note">„≈ / Monat“ zeigt, wie viel du für seltene Zahlungen jeden Monat zur Seite legen kannst.</p>' : ''}`;
   updateBadge();
 }
 
@@ -732,20 +745,12 @@ function renderStats() {
 
   $('#view').innerHTML = `
     ${monthBar(ym)}
-    ${(() => { const fm = fixedMonth(ym), all = d.spent + fm.total; return `<div class="sec-h" style="margin-top:8px"><h2>Der Monat im Überblick</h2></div>
-    <div class="card sum-card">
-      <div class="sum-r"><span>Ausgaben <small>ohne Fixkosten</small></span><b class="num" id="sumOut">${money(d.spent)}</b></div>
-      <div class="sum-r"><span>Fixkosten${fm.restSum ? ' <small>inkl. was noch kommt</small>' : ''}</span><b class="num" id="sumFix">${fm.estimated ? '≈ ' : ''}${money(fm.total)}</b></div>
-      <div class="sum-r sum-t"><span>Zusammen</span><b class="num" id="sumAll">${fm.estimated ? '≈ ' : ''}${money(all)}</b></div>
-      ${d.income ? `<div class="sum-r"><span>Einnahmen</span><b class="num" style="color:var(--income)">+${money(d.income)}</b></div>
-      <div class="sum-r sum-t"><span>Bleibt übrig</span><b class="num" style="color:${d.income - all < 0 ? 'var(--danger)' : 'var(--income)'}">${d.income - all >= 0 ? '+' : '−'}${money(Math.abs(d.income - all))}</b></div>` : ''}
-    </div>`; })()}
     <div class="sec-h"><h2>Wohin ging das Geld</h2><span class="num">${money0(d.spent)}</span></div>
-    <p class="note" style="padding:0 4px 10px;margin-top:-4px">Nur Ausgaben – Fixkosten haben ihren eigenen Reiter.</p>
+    <p class="note" style="padding:0 4px 10px;margin-top:-4px">Laufende Kosten – Fixkosten stehen im eigenen Reiter.</p>
     <div class="card">${share || '<div class="empty"><b>Keine Ausgaben</b>In diesem Monat ist noch nichts gebucht.</div>'}</div>
-    <div class="sec-h"><h2>Ausgaben der letzten 12 Monate</h2></div>
+    <div class="sec-h"><h2>Laufende Kosten der letzten 12 Monate</h2></div>
     <div class="card chart">
-      <svg viewBox="0 0 ${W} ${H}" class="cols" role="img" aria-label="Monatsausgaben der letzten 12 Monate">${budLine}<line x1="0" x2="${W}" y1="${base}" y2="${base}" class="axis"/>${bars}</svg>
+      <svg viewBox="0 0 ${W} ${H}" class="cols" role="img" aria-label="Laufende Kosten der letzten 12 Monate">${budLine}<line x1="0" x2="${W}" y1="${base}" y2="${base}" class="axis"/>${bars}</svg>
       <div class="chart-sum">
         <div><span>Durchschnitt</span><b class="num">${money0(avg)}</b></div>
         <div><span>Höchster Monat</span><b class="num">${vals[hiI] ? `${MON3[+months[hiI].slice(5) - 1]} · ${money0(vals[hiI])}` : '–'}</b></div>
@@ -807,7 +812,7 @@ function toast(msg, action) {
 
 /* ---------- Aktionen ---------- */
 const A = {
-  add() { openAdd(); },
+  add() { location.hash.startsWith('#/fixed') ? openRec() : openAdd(); },
   addTo(el) { openAdd(null, el.dataset.id); },
   newCat(el) { addCategory(el.dataset.kind); },
   catHist(el) { UI.histAll = false; openHistory(el.dataset.id); },
@@ -952,7 +957,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet();
   if (e.key === 'Enter' && UI.sheet && e.target.closest('#sheet') && e.target.tagName === 'INPUT' && (UI.sheet.id || UI.sheet.preset || UI.sheet.mode !== 'tx')) { e.preventDefault(); commitTx(); }
   // Mac: „n" öffnet Erfassen
-  if (e.key === 'n' && !e.metaKey && !e.ctrlKey && S.setup && $('#sheet').hidden && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) { e.preventDefault(); openAdd(); }
+  if (e.key === 'n' && !e.metaKey && !e.ctrlKey && S.setup && $('#sheet').hidden && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) { e.preventDefault(); A.add(); }
 });
 window.addEventListener('hashchange', () => { if (!$('#sheet').hidden) closeSheet(); route(); });
 // Neuer Tag / neuer Monat, wenn die App lange offen bleibt
