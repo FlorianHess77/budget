@@ -1,7 +1,7 @@
 'use strict';
 // Budget – Ausgaben erfassen, Monat im Blick. Reines JS, Daten lokal in IndexedDB.
 // Bei Änderungen APP_VER hochzählen, damit iPhone und Mac das Update bekommen.
-const APP_VER = '1.8.0';
+const APP_VER = '1.9.0';
 
 /* ---------- Hilfen ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -705,63 +705,122 @@ function renderFixed() {
 
 /* ---------- Auswertung ---------- */
 const MON3 = ['Jän', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+// Auswertung mit Umschalter: laufende Kosten, Fixkosten oder beides zusammen
+function statMode() {
+  if (!UI.statMode) { try { UI.statMode = localStorage.getItem('budget.stat'); } catch (e) {} }
+  if (!['run', 'fix', 'all'].includes(UI.statMode)) UI.statMode = 'run';
+  return UI.statMode;
+}
 function renderStats() {
   $('#nav').hidden = false; setTab('stats');
-  const ym = UI.cur, d = monthData(ym);
+  const mode = statMode(), ym = UI.cur, d = monthData(ym);
   const budget = activeCats('out').reduce((a, c) => a + (c.budget || 0), 0);
+  const months = Array.from({ length: 12 }, (_, i) => shiftMonth(ym, i - 11));
+  const runV = months.map(m => monthData(m).spent);
+  const fixV = months.map(m => fixedMonth(m).total);
+  const fm = fixedMonth(ym);
+  const RUN = 'var(--run)', FIX = 'var(--fix)';
 
-  // Wohin ging das Geld – nach Betrag sortiert, jede Zeile beschriftet
-  const rows = Object.entries(d.byCat).map(([id, v]) => ({ c: catById(id) || { name: 'Ohne Kategorie', color: '#888' }, v })).sort((a, b) => b.v - a.v);
+  // Wohin ging das Geld – je nach Ansicht
+  let rows = [], total = 0, listTitle = 'Wohin ging das Geld', listNote = '';
+  if (mode === 'run') {
+    rows = Object.entries(d.byCat).map(([id, v]) => { const c = catById(id) || { name: 'Ohne Kategorie', color: '#888' }; return { name: c.name, color: c.color, v }; });
+    total = d.spent; listNote = 'Laufende Kosten nach Kategorie.';
+  } else if (mode === 'fix') {
+    const g = new Map();
+    for (const t of fixedIn(ym)) { const k = t.recId || t.note; const e = g.get(k) || { name: t.note, color: FIX, v: 0 }; e.v += t.amount; g.set(k, e); }
+    for (const x of fm.rest) { const e = g.get(x.r.id) || { name: x.r.note, color: FIX, v: 0, extra: x.open ? 'noch einzutragen' : 'kommt noch' }; e.v += x.amt; if (!e.extra) e.extra = 'kommt noch'; g.set(x.r.id, e); }
+    rows = [...g.values()]; total = fm.total; listTitle = 'Fixkosten im ' + monthName(ym);
+    listNote = fm.rest.length ? 'Inklusive dem, was in diesem Monat noch abgebucht wird.' : '';
+  } else {
+    rows = [{ name: 'Laufende Kosten', color: RUN, v: d.spent }, { name: 'Fixkosten', color: FIX, v: fm.total }].filter(r => r.v);
+    total = d.spent + fm.total; listTitle = 'Laufend und fix';
+  }
+  rows.sort((a, b) => b.v - a.v);
   const max = rows[0]?.v || 1;
-  const share = rows.map(({ c, v }) => `
+  const share = rows.map(r => `
     <div class="sh">
-      <div class="cat-top"><span class="cat-n"><span class="dot" style="background:${c.color}"></span>${esc(c.name)}</span><span class="cat-v num">${money0(v)}</span></div>
-      <div class="sh-row"><div class="sh-bar"><div style="width:${(v / max * 100).toFixed(1)}%;background:${c.color}"></div></div><span class="sh-p num">${Math.round(v / d.spent * 100)} %</span></div>
+      <div class="cat-top"><span class="cat-n"><span class="dot" style="background:${r.color}"></span>${esc(r.name)}${r.extra ? ` <small class="sh-x">${r.extra}</small>` : ''}</span><span class="cat-v num">${money0(r.v)}</span></div>
+      <div class="sh-row"><div class="sh-bar"><div style="width:${(r.v / max * 100).toFixed(1)}%;background:${r.color}"></div></div><span class="sh-p num">${total ? Math.round(r.v / total * 100) : 0} %</span></div>
     </div>`).join('');
 
-  // 12 Monate bis zum gewählten Monat
-  const months = Array.from({ length: 12 }, (_, i) => shiftMonth(ym, i - 11));
-  const vals = months.map(m => monthData(m).spent);
+  // Zusammenfassung nur in „Gesamt“
+  const all = d.spent + fm.total;
+  const summary = mode !== 'all' ? '' : `
+    <div class="card sum-card" style="margin-top:4px">
+      <div class="sum-r"><span><span class="dot" style="background:${RUN}"></span> Laufende Kosten</span><b class="num" id="sumRun">${money(d.spent)}</b></div>
+      <div class="sum-r"><span><span class="dot" style="background:${FIX}"></span> Fixkosten${fm.restSum ? ' <small>inkl. was noch kommt</small>' : ''}</span><b class="num" id="sumFix">${fm.estimated ? '≈ ' : ''}${money(fm.total)}</b></div>
+      <div class="sum-r sum-t"><span>Zusammen</span><b class="num" id="sumAll">${fm.estimated ? '≈ ' : ''}${money(all)}</b></div>
+      ${d.income ? `<div class="sum-r"><span>Einnahmen</span><b class="num" style="color:var(--income)">+${money(d.income)}</b></div>
+      <div class="sum-r sum-t"><span>Bleibt übrig</span><b class="num" style="color:${d.income - all < 0 ? 'var(--danger)' : 'var(--income)'}">${d.income - all >= 0 ? '+' : '−'}${money(Math.abs(d.income - all))}</b></div>` : ''}
+    </div>`;
+
+  // 12 Monate
+  const vals = months.map((m, i) => mode === 'run' ? runV[i] : mode === 'fix' ? fixV[i] : runV[i] + fixV[i]);
   const withData = vals.filter(v => v > 0);
   const avg = withData.length ? withData.reduce((a, v) => a + v, 0) / withData.length : 0;
   const hiI = vals.indexOf(Math.max(...vals));
-  const W = 340, H = 190, top = 26, base = H - 26, slot = W / 12, bw = Math.min(20, slot - 8);
-  const vmax = Math.max(budget, ...vals, 1) * 1.08;
-  const y = v => base - (v / vmax) * (base - top);
-  const bars = months.map((m, i) => {
-    const v = vals[i], x = i * slot + (slot - bw) / 2, h = base - y(v), sel = m === ym;
-    const over = budget && v > budget;
-    const r = Math.min(4, h);
-    const path = h > 0 ? `M${x},${base}V${base - h + r}q0,-${r} ${r},-${r}h${bw - 2 * r}q${r},0 ${r},${r}V${base}Z` : '';
-    return `<g class="col${sel ? ' sel' : ''}" data-a="pickMonth" data-m="${m}" role="button" aria-label="${monthLabel(m)}: ${money0(v)}">
-      <title>${monthLabel(m)}: ${money(v)}</title>
-      <rect x="${i * slot}" y="0" width="${slot}" height="${H}" fill="transparent"/>
-      ${path ? `<path d="${path}" class="${over ? 'over' : ''}"/>` : ''}
-      ${sel && v ? `<text x="${x + bw / 2}" y="${y(v) - 8}" text-anchor="middle" class="val">${money0(v)}</text>` : ''}
-      <text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle" class="lbl">${MON3[+m.slice(5) - 1]}</text>
-    </g>`;
-  }).join('');
-  const budLine = budget ? `<line x1="0" x2="${W}" y1="${y(budget)}" y2="${y(budget)}" class="bud-l"/><text x="0" y="${y(budget) - 6}" class="bud-t">Budget ${money0(budget)}</text>` : '';
+  const showBud = mode === 'run' && budget;
+  const chartTitle = { run: 'Laufende Kosten', fix: 'Fixkosten', all: 'Alle Ausgaben' }[mode] + ' der letzten 12 Monate';
+  // Diagramm in echter Breite zeichnen, damit die Schrift am Mac nicht mitwächst
+  const chartSvg = W => {
+    const H = Math.round(Math.min(260, Math.max(190, W * 0.42))), top = 30, base = H - 26, slot = W / 12, bw = Math.min(28, slot - 10);
+    const vmax = Math.max(showBud ? budget : 0, ...vals, 1) * 1.12;
+    const y = v => base - (v / vmax) * (base - top);
+    const seg = (x, y0, y1, color, round, cls = '') => {
+      const h = y0 - y1; if (h <= 0) return '';
+      const r = round ? Math.min(4, h) : 0;
+      return `<path class="${cls}" style="fill:${cls === 'over' ? 'var(--danger)' : color}" d="M${x},${y0}V${y1 + r}q0,-${r} ${r},-${r}h${bw - 2 * r}q${r},0 ${r},${r}V${y0}Z"/>`;
+    };
+    const bars = months.map((m, i) => {
+      const v = vals[i], x = i * slot + (slot - bw) / 2, sel = m === ym;
+      let shapes;
+      if (mode === 'all') {
+        const yr = y(runV[i]), gap = runV[i] && fixV[i] ? 2 : 0;
+        shapes = seg(x, base, yr, RUN, !fixV[i]) + seg(x, yr - gap, y(runV[i] + fixV[i]), FIX, true);
+      } else shapes = seg(x, base, y(v), mode === 'run' ? RUN : FIX, true, showBud && v > budget ? 'over' : '');
+      return `<g class="col${sel ? ' sel' : ''}" data-a="pickMonth" data-m="${m}" role="button" aria-label="${monthLabel(m)}: ${money0(v)}">
+        <title>${monthLabel(m)}: ${money(v)}${mode === 'all' ? ` (laufend ${money(runV[i])}, fix ${money(fixV[i])})` : ''}</title>
+        <rect x="${i * slot}" y="0" width="${slot}" height="${H}" fill="transparent"/>
+        ${shapes}
+        ${sel && v ? `<text x="${x + bw / 2}" y="${y(v) - 8}" text-anchor="middle" class="val">${money0(v)}</text>` : ''}
+        <text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle" class="lbl">${MON3[+m.slice(5) - 1]}</text>
+      </g>`;
+    }).join('');
+    const budLine = showBud ? `<line x1="0" x2="${W}" y1="${y(budget)}" y2="${y(budget)}" class="bud-l"/><text x="0" y="${y(budget) - 6}" class="bud-t">Budget ${money0(budget)}</text>` : '';
+    return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" class="cols cols-${mode}" role="img" aria-label="${chartTitle}">${budLine}<line x1="0" x2="${W}" y1="${base}" y2="${base}" class="axis"/>${bars}</svg>`;
+  };
+  const head = { run: ['th-run', 'Laufende Kosten'], fix: ['th-fix', 'Fixkosten'], all: ['th-all', 'Alle Ausgaben'] }[mode];
+  const th = mode === 'run' ? '<th>Laufend</th><th>Einnahmen</th>' : mode === 'fix' ? '<th>Fixkosten</th>' : '<th>Laufend</th><th>Fix</th><th>Zusammen</th>';
+  const tr = (m, i) => mode === 'run' ? `<td class="num">${money(runV[i])}</td><td class="num">${money(monthData(m).income)}</td>` : mode === 'fix' ? `<td class="num">${money(fixV[i])}</td>` : `<td class="num">${money0(runV[i])}</td><td class="num">${money0(fixV[i])}</td><td class="num"><b>${money0(runV[i] + fixV[i])}</b></td>`;
 
   $('#view').innerHTML = `
+    <div class="tab-head ${head[0]}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V12M12 20V5M19 20v-9"/></svg><span>Auswertung · ${head[1]}</span></div>
+    <div class="seg seg3" role="tablist" aria-label="Was soll ausgewertet werden?">
+      ${[['run', 'Laufend'], ['fix', 'Fix'], ['all', 'Gesamt']].map(([k, l]) => `<button role="tab" data-a="statMode" data-m="${k}" class="sm-${k}${mode === k ? ' on' : ''}" aria-selected="${mode === k}">${l}</button>`).join('')}
+    </div>
     ${monthBar(ym)}
-    <div class="sec-h"><h2>Wohin ging das Geld</h2><span class="num">${money0(d.spent)}</span></div>
-    <p class="note" style="padding:0 4px 10px;margin-top:-4px">Laufende Kosten – Fixkosten stehen im eigenen Reiter.</p>
-    <div class="card">${share || '<div class="empty"><b>Keine Ausgaben</b>In diesem Monat ist noch nichts gebucht.</div>'}</div>
-    <div class="sec-h"><h2>Laufende Kosten der letzten 12 Monate</h2></div>
+    ${summary}
+    <div class="sec-h"><h2>${listTitle}</h2><span class="num">${money0(total)}</span></div>
+    ${listNote ? `<p class="note" style="padding:0 4px 10px;margin-top:-4px">${listNote}</p>` : ''}
+    <div class="card">${share || `<div class="empty"><b>Nichts in diesem Monat</b>${mode === 'fix' ? 'Für diesen Monat gibt es keine Fixkosten.' : 'In diesem Monat ist noch nichts gebucht.'}</div>`}</div>
+    <div class="sec-h"><h2>${chartTitle}</h2></div>
     <div class="card chart">
-      <svg viewBox="0 0 ${W} ${H}" class="cols" role="img" aria-label="Laufende Kosten der letzten 12 Monate">${budLine}<line x1="0" x2="${W}" y1="${base}" y2="${base}" class="axis"/>${bars}</svg>
+      ${chartSvg(340)}
+      ${mode === 'all' ? `<p class="legend"><span><span class="dot" style="background:${RUN}"></span>Laufende Kosten</span><span><span class="dot" style="background:${FIX}"></span>Fixkosten</span></p>` : ''}
       <div class="chart-sum">
         <div><span>Durchschnitt</span><b class="num">${money0(avg)}</b></div>
         <div><span>Höchster Monat</span><b class="num">${vals[hiI] ? `${MON3[+months[hiI].slice(5) - 1]} · ${money0(vals[hiI])}` : '–'}</b></div>
       </div>
-      ${budget && vals.some(v => v > budget) ? '<p class="note" style="padding:4px 0 10px"><span class="key-over"></span>Rot = über dem Monatsbudget</p>' : ''}
+      ${showBud && vals.some(v => v > budget) ? '<p class="note" style="padding:4px 0 10px"><span class="key-over"></span>Rot = über dem Monatsbudget</p>' : ''}
       <p class="note" style="padding:0 0 12px">Tipp auf einen Monat, um ihn oben anzuzeigen.</p>
     </div>
     <details class="card tbl"><summary>Als Tabelle</summary>
-      <table><thead><tr><th>Monat</th><th>Ausgaben</th><th>Einnahmen</th></tr></thead><tbody>
-      ${months.slice().reverse().map(m => { const md = monthData(m); return `<tr><td>${monthLabel(m)}</td><td class="num">${money(md.spent)}</td><td class="num">${money(md.income)}</td></tr>`; }).join('')}
+      <table><thead><tr><th>Monat</th>${th}</tr></thead><tbody>
+      ${months.map((m, i) => [m, i]).reverse().map(([m, i]) => `<tr><td>${monthLabel(m)}</td>${tr(m, i)}</tr>`).join('')}
       </tbody></table></details>`;
+  const box = $('#view .chart');
+  if (box) { const w = Math.round(box.clientWidth - 36); if (w > 200 && Math.abs(w - 340) > 8) $('#view .cols').outerHTML = chartSvg(w); }
 }
 
 /* ---------- Export, Backup ---------- */
@@ -851,6 +910,7 @@ const A = {
   },
   month(el) { UI.cur = shiftMonth(UI.cur, +el.dataset.d); UI.filter = null; UI.showAll = false; route(); },
   pickMonth(el) { UI.cur = el.dataset.m; renderStats(); },
+  statMode(el) { UI.statMode = el.dataset.m; try { localStorage.setItem('budget.stat', UI.statMode); } catch (e) {} renderStats(); },
   addRec() { openRec(); },
   editRec(el) { const r = recById(el.dataset.id); if (r) openRec(r); },
   payFix(el) { const p = pendingList().find(x => x.r.id === el.dataset.id && x.m === el.dataset.m); if (p) openFixTx(null, p); },

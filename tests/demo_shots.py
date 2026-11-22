@@ -78,6 +78,13 @@ async def main():
         await pg.screenshot(path=f'{OUT}/5-mac-laufende-kosten.png')
         await pg.goto(BASE + '#/fixed'); await pg.wait_for_timeout(400)
         await pg.screenshot(path=f'{OUT}/6-mac-fixkosten.png')
+        await pg.goto(BASE + '#/stats'); await pg.wait_for_timeout(400)
+        await pg.set_viewport_size({'width': 1280, 'height': 1250}); await pg.wait_for_timeout(200)
+        await pg.screenshot(path=f'{OUT}/7-mac-auswertung-laufend.png')
+        await pg.click('.seg3 [data-m="fix"]'); await pg.wait_for_timeout(300)
+        await pg.screenshot(path=f'{OUT}/8-mac-auswertung-fix.png')
+        await pg.click('.seg3 [data-m="all"]'); await pg.wait_for_timeout(300)
+        await pg.screenshot(path=f'{OUT}/9-mac-auswertung-gesamt.png')
         await b.close()
 
 asyncio.run(main())

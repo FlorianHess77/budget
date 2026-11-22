@@ -284,7 +284,7 @@ button { cursor: pointer; }
 .sh-bar > div { height: 100%; border-radius: 0 4px 4px 0; min-width: 3px; }
 .sh-p { font-size: 15px; color: var(--muted); width: 44px; text-align: right; }
 .chart { padding-top: 14px; }
-.cols { display: block; width: 100%; height: auto; overflow: visible; }
+.cols { display: block; width: 100%; max-width: 100%; height: auto; overflow: visible; }
 .cols .col { cursor: pointer; }
 .cols .col path { fill: var(--bar); opacity: .55; }
 .cols .col.sel path { opacity: 1; }
@@ -402,6 +402,23 @@ button { cursor: pointer; }
 .nav-add.fx-mode { background: var(--fix); color: var(--fix-soft); }
 :root[data-theme="dark"] .nav-add.fx-mode { color: #0B1528; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .nav-add.fx-mode { color: #0B1528; } }
+
+/* Auswertung: Umschalter Laufend / Fix / Gesamt */
+.seg3 { grid-template-columns: repeat(3, 1fr); padding: 5px; margin-bottom: 14px; border: 1px solid var(--edge); }
+.seg3 button { font-size: 18px; padding: 12px 6px; font-weight: 700; }
+.seg3 button.on.sm-run { background: var(--run); color: var(--run-soft); }
+.seg3 button.on.sm-fix { background: var(--fix); color: var(--fix-soft); }
+.seg3 button.on.sm-all { background: var(--text); color: var(--bg); }
+:root[data-theme="dark"] .seg3 button.on.sm-run, :root[data-theme="dark"] .seg3 button.on.sm-fix { color: #0B0D11; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .seg3 button.on.sm-run, :root:not([data-theme="light"]) .seg3 button.on.sm-fix { color: #0B0D11; } }
+.th-all { background: var(--soft); color: var(--text); border: 1px solid var(--edge); }
+.cols-fix .col path, .cols-all .col path { opacity: .55; }
+.cols-fix .col.sel path, .cols-all .col.sel path, .cols-fix .col:hover path, .cols-all .col:hover path { opacity: 1; }
+.sh-x { font-size: 14px; font-weight: 400; color: var(--muted); }
+.legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 15px; margin: 8px 0 0; }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.legend .dot, .sum-r .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.sum-r .dot { margin-right: 6px; }
 
 /* Hilfe */
 .help { padding: 0 18px; }

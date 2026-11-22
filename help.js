@@ -72,10 +72,14 @@ const HELP = [
   },
   {
     id: 'stats', t: 'Statistik', b: `
-    <p>Die Statistik zeigt nur die <b>laufenden Kosten</b>. Fixkosten siehst du im Reiter Fixkosten, mit den Pfeilen auch für frühere Monate.</p>
+    <p>Oben schaltest du um, was ausgewertet wird:</p>
     <ul>
-      <li><b>Wohin ging das Geld:</b> alle Kategorien des Monats, die teuerste zuerst, mit Anteil in Prozent.</li>
-      <li><b>Letzte 12 Monate:</b> eine Säule pro Monat. Die Linie zeigt dein Monatsbudget. Rote Säulen liegen darüber.</li>
+      <li><b>Laufend</b> (grün): nur die laufenden Kosten, nach Kategorie.</li>
+      <li><b>Fix</b> (blau): nur die Fixkosten, nach Eintrag – mit dem, was im Monat noch kommt.</li>
+      <li><b>Gesamt</b>: beides getrennt aufgelistet und zusammengerechnet, dazu Einnahmen und was übrig bleibt. Nur hier werden die Zahlen addiert.</li>
+    </ul>
+    <ul>
+      <li><b>Letzte 12 Monate:</b> eine Säule pro Monat. Bei „Laufend“ zeigt die Linie dein Monatsbudget, rote Säulen liegen darüber. Bei „Gesamt“ ist jede Säule unten grün (laufend) und oben blau (fix).</li>
       <li>Eine <b>Säule antippen</b> zeigt diesen Monat oben an.</li>
       <li><b>Als Tabelle</b> zeigt alle Zahlen zum Nachlesen.</li>
     </ul>`
