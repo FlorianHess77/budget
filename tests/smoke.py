@@ -183,6 +183,7 @@ async def run(theme):
         await pg.click('[data-a="saveTx"]'); await pg.wait_for_timeout(250)
         check(await pg.evaluate("S.tx.filter(t=>t.note==='Strom').length") == 0, f'{theme}: schwankender Betrag wird nicht automatisch gebucht')
         check(await pg.locator('.fxp').count() == 2 and await pg.inner_text('.nav-i[data-tab="fixed"] .badge') == '2', f'{theme}: 2 Beträge offen, Zahl am Reiter')
+        check(await pg.locator('.card.st-bad .fxp').count() == 2 and await pg.locator('.card.st-ok .fxb').count() == 1 and await pg.locator('.fx:has-text("Strom") .pill-bad').count() == 1, f'{theme}: offen rot, abgebucht grün, Schild „offen“ bei Strom')
         await shot('10a-fixkosten-offen')
         await pg.locator('.fxp').first.click(); await pg.wait_for_timeout(150)
         await pg.click('[data-a="saveTx"]'); await pg.wait_for_timeout(100)

@@ -360,7 +360,6 @@ button { cursor: pointer; }
 :root[data-theme="dark"] .badge { color: #1A0705; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .badge { color: #1A0705; } }
 @media (min-width: 900px) { .badge { position: static; margin-left: auto; } }
-.fx-pend { border: 2px solid var(--danger); }
 .fxp { align-items: center; }
 .fxp-b { flex: none; background: var(--danger); color: #FFFFFF; font-weight: 700; font-size: 16px; border-radius: 12px; padding: 10px 14px; }
 :root[data-theme="dark"] .fxp-b { color: #1A0705; }
@@ -420,6 +419,45 @@ button { cursor: pointer; }
 .legend span { display: inline-flex; align-items: center; gap: 8px; }
 .legend .dot, .sum-r .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
 .sum-r .dot { margin-right: 6px; }
+
+/* Fixkosten nach Status eingefärbt: abgebucht grün, kommt noch gelb, offen rot */
+:root {
+  --ok-bg: #E1F3EA; --ok-bd: #7FC3A5; --ok-tx: #0F5A40;
+  --wait-bg: #FFF1D2; --wait-bd: #E3B04F; --wait-tx: #6A4200; --wait-key: #E0A12E;
+  --bad-bg: #FCE3DF; --bad-bd: #DD857B; --bad-tx: #8E1A12;
+}
+:root[data-theme="dark"] {
+  --ok-bg: #12302A; --ok-bd: #2E7A5D; --ok-tx: #8FE6C4;
+  --wait-bg: #33270E; --wait-bd: #8A6420; --wait-tx: #FFD58A; --wait-key: #F2C14E;
+  --bad-bg: #3B1C19; --bad-bd: #9A3F37; --bad-tx: #FFB1A8;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --ok-bg: #12302A; --ok-bd: #2E7A5D; --ok-tx: #8FE6C4;
+  --wait-bg: #33270E; --wait-bd: #8A6420; --wait-tx: #FFD58A; --wait-key: #F2C14E;
+  --bad-bg: #3B1C19; --bad-bd: #9A3F37; --bad-tx: #FFB1A8;
+} }
+.card.st-ok { background: var(--ok-bg); border: 2px solid var(--ok-bd); }
+.card.st-wait { background: var(--wait-bg); border: 2px solid var(--wait-bd); }
+.card.st-bad { background: var(--bad-bg); border: 2px solid var(--bad-bd); }
+.st-ok .tx { border-bottom-color: var(--ok-bd); }
+.st-wait .tx { border-bottom-color: var(--wait-bd); }
+.st-bad .tx { border-bottom-color: var(--bad-bd); }
+.st-ok .fx-d, .st-wait .fx-d, .st-bad .fx-d { color: var(--text); opacity: .8; }
+.st-wait .fxc .tx-a { color: var(--wait-tx); font-weight: 700; }
+.st-ok .fx-ok { background: var(--ok-tx); color: var(--ok-bg); }
+.key { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: 0; flex: none; }
+.sec-h h2 .key { width: 14px; height: 14px; vertical-align: 1px; }
+.key-ok { background: var(--ok-tx); } .key-wait { background: var(--wait-key); } .key-bad { background: var(--danger); }
+.st-keys { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; }
+.st-bar { display: flex; gap: 3px; height: 14px; max-width: 380px; margin: 14px auto 12px; }
+.st-bar > div { border-radius: 4px; min-width: 6px; }
+.sb-ok { background: var(--ok-tx); } .sb-wait { background: var(--wait-key); } .sb-bad { background: var(--danger); }
+.pill { display: inline-block; font-size: 13px; font-weight: 700; border-radius: 8px; padding: 1px 8px; margin-left: 6px; vertical-align: 2px; white-space: nowrap; }
+.pill-ok { background: var(--ok-bg); color: var(--ok-tx); border: 1px solid var(--ok-bd); }
+.pill-wait { background: var(--wait-bg); color: var(--wait-tx); border: 1px solid var(--wait-bd); }
+.pill-bad { background: var(--bad-bg); color: var(--bad-tx); border: 1px solid var(--bad-bd); }
+.fx .tx-t { white-space: normal; overflow-wrap: anywhere; }
+.pill-off { background: var(--soft); color: var(--muted); border: 1px solid var(--edge); font-weight: 400; }
 
 /* Hilfe */
 .help { padding: 0 18px; }

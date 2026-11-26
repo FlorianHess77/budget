@@ -1,7 +1,7 @@
 'use strict';
 // Budget – Ausgaben erfassen, Monat im Blick. Reines JS, Daten lokal in IndexedDB.
 // Bei Änderungen APP_VER hochzählen, damit iPhone und Mac das Update bekommen.
-const APP_VER = '1.10.0';
+const APP_VER = '1.11.0';
 
 /* ---------- Hilfen ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -676,21 +676,33 @@ function renderFixed() {
       <span class="tx-m"><div class="tx-t">${esc(r.note)}</div><div class="fx-d">am ${longDate(nextDue(r))}</div></span>
       <span class="tx-a num">${r.vary ? (lastAmount(r) ? '≈ ' + money0(lastAmount(r)) : 'schwankt') : money(r.amount)}</span>
     </button>`;
+  const status = r => {
+    if (ym !== now) return null;
+    if (pend.some(p => p.r === r && p.m === ym)) return ['bad', 'offen'];
+    if (bookedIn(r, ym)) return ['ok', 'abgebucht'];
+    if ((r.skip || []).includes(ym)) return ['off', 'diesmal nichts'];
+    const n = nextDue(r);
+    if (monthOf(n) === ym && n > today) return ['wait', 'kommt noch'];
+    return ['off', 'nicht in diesem Monat'];
+  };
   const defRow = r => {
-    const e = every(r), amt = r.vary ? (lastAmount(r) ? `≈ ${money(typical(r))}` : 'schwankt') : money(r.amount);
-    return `<button class="tx fx" data-a="editRec" data-id="${r.id}">
+    const e = every(r), amt = r.vary ? (lastAmount(r) ? `≈ ${money(typical(r))}` : 'schwankt') : money(r.amount), st = status(r);
+    return `<button class="tx fx${st ? ' row-' + st[0] : ''}" data-a="editRec" data-id="${r.id}">
       <span class="tx-m">
-        <div class="tx-t">${esc(r.note)}</div>
+        <div class="tx-t">${esc(r.note)}${st ? ` <span class="pill pill-${st[0]}">${st[1]}</span>` : ''}</div>
         <div class="fx-d"><b>${EVERY[e]}</b>${r.vary ? ' · Betrag schwankt' : ''}</div>
         <div class="fx-d">nächste am ${longDate(nextDue(r))}</div>
       </span>
       <span class="fx-a"><span class="tx-a num">${amt}</span>${e > 1 ? `<span class="fx-pm num">≈ ${money0(perMonth(r))} / Monat</span>` : ''}</span>
     </button>`;
   };
-  let sub = '', sub2 = '';
+  let sub = '', sub2 = '', bar = '';
   if (!recs.length && !booked.length) sub = 'Miete, Strom, Kredit – einmal eintragen, die App kümmert sich um den Rest.';
   else {
-    sub = fm.restSum ? `<span id="fixPaid">schon abgebucht <b class="num nw">${money(fm.paid)}</b></span> · <span class="nw">kommt noch <b class="num">${fm.estimated ? '≈\u00a0' : ''}${money(fm.restSum)}</b></span>` : (ym === now && !booked.length ? '' : '<span id="fixPaid">alles abgebucht</span>');
+    const waitSum = fm.rest.filter(x => !x.open).reduce((a, x) => a + x.amt, 0), openSum = fm.rest.filter(x => x.open).reduce((a, x) => a + x.amt, 0);
+    sub = fm.restSum ? `<span id="fixPaid" class="nw"><i class="key key-ok"></i>abgebucht <b class="num">${money(fm.paid)}</b></span>${waitSum ? ` <span class="nw"><i class="key key-wait"></i>kommt noch <b class="num">${fm.rest.some(x => !x.open && x.r.vary) ? '≈\u00a0' : ''}${money(waitSum)}</b></span>` : ''}${openSum ? ` <span class="nw"><i class="key key-bad"></i>offen <b class="num">≈\u00a0${money(openSum)}</b></span>` : ''}`
+      : (ym === now && !booked.length ? '' : '<span id="fixPaid" class="nw"><i class="key key-ok"></i>alles abgebucht</span>');
+    if (fm.total) bar = `<div class="st-bar" aria-hidden="true">${[['ok', fm.paid], ['wait', waitSum], ['bad', openSum]].filter(x => x[1] > 0).map(([k, v]) => `<div class="sb-${k}" style="flex:${v}"></div>`).join('')}</div>`;
     if (pend.length) sub2 = `<b style="color:var(--danger)">${pend.length > 1 ? pend.length + ' Beträge' : '1 Betrag'} noch einzutragen</b>`;
     else if (ym === now) sub2 = `Im Schnitt ≈ ${money0(pm)} pro Monat · ${money0(pm * 12)} im Jahr`;
   }
@@ -701,14 +713,15 @@ function renderFixed() {
     <section class="hero">
       <p class="hero-l">Fixkosten im ${monthName(ym)}${fm.restSum ? ' – alle zusammen' : ''}</p>
       <p class="hero-n num" id="fixSum">${fm.estimated ? '≈ ' : ''}${money(fm.total)}</p>
-      ${sub ? `<p class="hero-s">${sub}</p>` : ''}
+      ${bar}
+      ${sub ? `<p class="hero-s st-keys">${sub}</p>` : ''}
       ${sub2 ? `<p class="hero-s" style="margin-top:6px">${sub2}</p>` : ''}
     </section>
-    ${pend.length ? `<div class="sec-h"><h2>Betrag eintragen</h2><span>${pend.length}</span></div>
-      <div class="card fx-pend">${pend.map(pendRow).join('')}</div>` : ''}
-    <div class="sec-h"><h2>Abgebucht im ${monthName(ym)}</h2><span class="num">${booked.length ? money0(sum) : ''}</span></div>
-    <div class="card">${booked.length ? booked.map(bookedRow).join('') : '<div class="empty">In diesem Monat noch nichts abgebucht.</div>'}</div>
-    ${coming.length ? `<div class="sec-h"><h2>Kommt noch im ${monthName(ym)}</h2><span class="num">${money0(coming.reduce((a, r) => a + (r.vary ? typical(r) : r.amount), 0))}</span></div><div class="card">${coming.map(comingRow).join('')}</div>` : ''}
+    ${pend.length ? `<div class="sec-h"><h2><i class="key key-bad"></i>Offen – Betrag eintragen</h2><span>${pend.length}</span></div>
+      <div class="card fx-pend st-bad">${pend.map(pendRow).join('')}</div>` : ''}
+    <div class="sec-h"><h2><i class="key key-ok"></i>Abgebucht im ${monthName(ym)}</h2><span class="num">${booked.length ? money0(sum) : ''}</span></div>
+    <div class="card${booked.length ? ' st-ok' : ''}">${booked.length ? booked.map(bookedRow).join('') : '<div class="empty">In diesem Monat noch nichts abgebucht.</div>'}</div>
+    ${coming.length ? `<div class="sec-h"><h2><i class="key key-wait"></i>Kommt noch im ${monthName(ym)}</h2><span class="num">${money0(coming.reduce((a, r) => a + (r.vary ? typical(r) : r.amount), 0))}</span></div><div class="card st-wait">${coming.map(comingRow).join('')}</div>` : ''}
     <div class="sec-h"><h2>Alle Fixkosten</h2><span>${recs.length || ''}</span></div>
     <div class="card">${recs.length ? recs.slice().sort((a, b) => a.note.localeCompare(b.note, 'de')).map(defRow).join('') : '<div class="empty"><b>Noch keine Fixkosten</b>Tipp unten auf „Fixkosten hinzufügen“.</div>'}
       <button class="more-btn" data-a="addRec">+ Fixkosten hinzufügen</button></div>
